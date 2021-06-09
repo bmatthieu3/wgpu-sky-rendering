@@ -28,12 +28,20 @@ In the fragment shader:
 
 If you want more precision about the algorithm used. See my talk at ADASS 2020 at this [link](https://www.youtube.com/watch?v=TILtJOiiRoc).
 
-## Test it:
+## Usage:
 
-To run it just go to the root of the repo and do:
+### From Source
 
 ```sh
-cargo run --release
+# Clone the repo
+$ git clone https://github.com/bmatthieu3/wgpu-sky-rendering.git
+$ cd wgpu-sky-rendering
+
+# Compile
+$ cargo build --release
+
+# Run
+$ cargo run --release
 ```
 
 You can use the left and right keyboard touches to change the projections.
