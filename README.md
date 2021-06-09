@@ -17,7 +17,8 @@ See this [link](https://en.wikipedia.org/wiki/List_of_map_projections) for infor
 
 ## Algorithm
 
-3d world positions for each pixels are precomputed and stored in RGBA float textures.
+3D world positions for each pixel are precomputed and stored in RGBA float textures.
+
 In the fragment shader:
 
 * We retrieve the 3d world position of the fragment by looking the precomputed texture.
