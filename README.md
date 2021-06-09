@@ -24,6 +24,8 @@ In the fragment shader:
 * Retrieve the good tile texture from the HEALPix cell index.
 * Get the good pixel color using the dx, dy offset within that tile texture.
 
+![Aitoff projection rendering of the sky](./screenshot.png)
+
 If you want more precision about the algorithm used. See my talk at ADASS 2020 at this [link](https://www.youtube.com/watch?v=TILtJOiiRoc).
 
 ## Test it:
