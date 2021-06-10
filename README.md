@@ -15,23 +15,15 @@ Supported projections are:
 
 See this [link](https://en.wikipedia.org/wiki/List_of_map_projections) for information about map projections.
 
-## Algorithm
+## How it works
 
-3D world positions for each pixel are precomputed and stored in RGBA float textures.
+If you want more precision about the algorithm and techniques used:
+* Read this [article](https://bmatthieu3.github.io/posts/allskyrendering/) I wrote on my personal blog.
+* See my talk at ADASS 2020 at this [link](https://www.youtube.com/watch?v=TILtJOiiRoc).
 
-In the fragment shader:
+## Usage
 
-* We retrieve the 3d world position of the fragment by looking the precomputed texture.
-* A rotation matrix is then applied to the 3d world position.
-* After that one can retrieve the HEALPix cell in which the position is located. This gives three things: the index of the HEALPix cell, the dx and dy offset within that cell
-* Retrieve the good tile texture from the HEALPix cell index.
-* Get the good pixel color using the dx, dy offset within that tile texture.
-
-If you want more precision about the algorithm used. See my talk at ADASS 2020 at this [link](https://www.youtube.com/watch?v=TILtJOiiRoc).
-
-## Usage:
-
-You can use the left and right keys to change the projections.
+Play with the left and right keys to change the current projection.
 
 ### From Source
 
