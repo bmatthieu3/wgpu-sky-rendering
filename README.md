@@ -7,11 +7,11 @@ This method does the projection per-pixel and runs in realtime.
 ![Aitoff projection rendering of the sky](./screenshot.png)
 
 Supported projections are:
-* Aitoff
-* Mercator
-* Mollweide
-* Azimuthal
-* Gnomonic
+* [Aitoff](https://en.wikipedia.org/wiki/Aitoff_projection)
+* [Mercator](https://en.wikipedia.org/wiki/Mercator_projection)
+* [Mollweide](https://en.wikipedia.org/wiki/Mollweide_projection)
+* [Azimuthal](https://en.wikipedia.org/wiki/Azimuthal_equidistant_projection)
+* [Gnomonic](https://en.wikipedia.org/wiki/Gnomonic_projection)
 
 See this [link](https://en.wikipedia.org/wiki/List_of_map_projections) for information about map projections.
 
