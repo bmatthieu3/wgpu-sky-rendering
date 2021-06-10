@@ -347,7 +347,7 @@ impl State {
 
         let clock = Instant::now();
 
-        Self {
+        let mut app = Self {
             surface,
             device,
             queue,
@@ -369,7 +369,10 @@ impl State {
             window_size_buf,
             rot_mat_buf,
             clock,
-        }
+        };
+        app.resize::<Aitoff>(size);
+
+        app
     }
 
     fn resize<P: Projection<f32>>(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
