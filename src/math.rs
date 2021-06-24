@@ -90,3 +90,31 @@ pub fn sinc_positive<T: Float>(mut x: T) -> T {
         T::one() - x * (T::one() - x / twenty) / six
     }
 }
+
+use cgmath::InnerSpace;
+pub fn rotation_from_direction<T: Float>(direction: &Vec3<T>, up: &Vec3<T>) -> Mat4<T> {
+    let xaxis = up.cross(*direction).normalize();
+    let yaxis = direction.cross(xaxis).normalize();
+
+    Mat4::new(
+        xaxis.x,
+        yaxis.x,
+        direction.x,
+        T::zero(),
+
+        xaxis.y,
+        yaxis.y,
+        direction.y,
+        T::zero(),
+
+        xaxis.z,
+        yaxis.z,
+        direction.z,
+        T::zero(),
+
+        T::zero(),
+        T::zero(),
+        T::zero(),
+        T::one(),
+    )
+}

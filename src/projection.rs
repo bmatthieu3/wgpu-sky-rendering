@@ -61,7 +61,7 @@ pub struct Mercator;
 
 use crate::math;
 use cgmath::Vector2;
-
+use crate::math::{Vec2, Vec4};
 impl<T> Projection<T> for Aitoff
 where
     T: Float,
@@ -123,7 +123,7 @@ where
     ///
     /// * `x` - in normalized device coordinates between [-1; 1]
     /// * `y` - in normalized device coordinates between [-1; 1]
-    fn clip_to_world_space(pos_clip_space: &Vector2<T>) -> Option<cgmath::Vector4<T>> {
+    fn clip_to_world_space(pos_clip_space: &Vec2<T>) -> Option<Vec4<T>> {
         if Self::is_included_inside_projection(&pos_clip_space) {
             let u = pos_clip_space.x * T::PI() * T::from(0.5).unwrap();
             let v = pos_clip_space.y * T::PI();
@@ -562,11 +562,8 @@ where
     /// * `x` - in normalized device coordinates between [-1; 1]
     /// * `y` - in normalized device coordinates between [-1; 1]
     fn clip_to_world_space(pos_clip_space: &Vector2<T>) -> Option<cgmath::Vector4<T>> {
-        //if pos_clip_space.x * pos_clip_space.x + pos_clip_space.y * pos_clip_space.y >= 1.0 {
-        //    None
-        //} else {
-        let x_2d = pos_clip_space.x * T::PI();
-        let y_2d = pos_clip_space.y * T::PI();
+        let x_2d = pos_clip_space.x * T::PI() * T::from(2.0).unwrap();
+        let y_2d = pos_clip_space.y * T::PI() * T::from(2.0).unwrap();
         let r = x_2d * x_2d + y_2d * y_2d;
 
         let z = (T::one() + r).sqrt();

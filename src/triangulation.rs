@@ -517,7 +517,7 @@ fn recursive_triangulation<T: Float, P: Projection<T>>(
     }
 }
 use crate::projection::Projection;
-use crate::Vertex;
+use crate::vertex::Vertex;
 impl Triangulation {
     pub fn create<P: Projection<f32>>() -> (Vec<Vertex>, Vec<u16>) {
         let (mut vertices, mut idx) = (Vec::new(), Vec::new());
