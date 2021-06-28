@@ -48,7 +48,7 @@ where
     }
 }
 
-use core::ops::Deref;
+use std::ops::Deref;
 impl<T> Deref for ArcDeg<T>
 where
     T: BaseFloat,

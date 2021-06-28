@@ -1,35 +1,89 @@
+#![allow(non_snake_case)]
+
 #[derive(Clone, Copy)]
-struct Entity(usize);
+#[derive(PartialEq, Eq)]
+#[derive(Debug)]
+pub struct Entity(usize);
 
-trait Component<'a> {    
-    fn query(world: &'a Game) -> Box<dyn Iterator<Item=Self>> where Self: 'a;
-}
+impl Entity {
+    pub fn new(world: &mut Game) -> Self {
+        let entity = if world.free_entities.is_empty() {
+            let entity = Entity(world.num_entities);
+            world.num_entities += 1;
+    
+            for c in &mut *world.components {
+                c.push_none();
+            }
 
-use std::vec;
+            entity
+        } else {
+            let entity = world.free_entities.pop().unwrap();
+            entity
+        };
 
-use futures::stream::futures_unordered::Iter;
-
-use crate::math::Vec3;
-pub struct Position {
-    velocity: Vec3<f32>,
-    position: Vec3<f32>,
-}
-
-fn get<'a, T>(world: &'a Game) -> Box<dyn Iterator<Item=&'a Option<T>> + 'a>
-    where
-        T: Sized + 'static
-{
-    for component_vec in &world.components {
-        if let Some(component_vec) = component_vec.as_any()
-            .downcast_ref::<Vec<Option<T>>>()
-        {
-            let it = component_vec.iter();
-            return Box::new(it);
-        }
+        entity
     }
 
-    Box::new(std::iter::empty())
+    pub fn add<'a, T>(self, world: &'a mut Game, component: T) -> Self
+    where
+        T: Component<'a> + 'static
+    {
+        // Loop over the type of components'vec to see if there is one matching
+        for c in world.components.iter_mut() {
+            if let Some(c) = c.as_any_mut()
+                .downcast_mut::<Vec<Option<T>>>()
+            {
+                c[self.0] = Some(component);
+                return self;
+            }
+        }
+
+        // The component type has not been found
+        // create a new one
+        let mut component_vec = Vec::with_capacity(world.num_entities);
+        for _ in 0..world.num_entities {
+            component_vec.push_none();
+        }
+        component_vec[self.0] = Some(component);
+        // Add it to the list of component
+        world.components.push(Box::new(component_vec));
+
+        self
+    }
+
+    pub fn remove<'a, T>(self, world: &'a mut Game) -> Self
+    where
+        T: Component<'a> + 'static
+    {
+        // Loop over the type of components'vec to see if there is one matching
+        for (idx, c) in world.components.iter_mut().enumerate() {
+            if let Some(c) = c.as_any_mut()
+                .downcast_mut::<Vec<Option<T>>>()
+            {
+                c.set_none(self.0);
+                let used_component = c.used_component();
+
+                if !used_component {
+                    world.components.remove(idx);
+                }
+                return self;
+            }
+        }
+
+        // The component type has not been found
+        // Then we do nothing
+        self
+    }
 }
+
+pub trait Component<'a> {
+    type RefType: 'a;
+    type RefMutType: 'a;
+
+    fn query(world: &'a Game) -> Box<dyn Iterator<Item=Self::RefType> + 'a>;
+    fn query_mut(world: &'a mut Game) -> Box<dyn Iterator<Item=Self::RefMutType> + 'a>;
+}
+
 trait ComponentVec {
     fn push_none(&mut self);
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
@@ -39,11 +93,14 @@ trait ComponentVec {
     fn used_component(&self) -> bool;
 }
 
-impl<T> ComponentVec for Vec<Option<T>>
-where T: Component + 'static {
+impl<'a, T> ComponentVec for Vec<Option<T>>
+where
+    T: Component<'a> + 'static
+{
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self as &mut dyn std::any::Any
     }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self as &dyn std::any::Any
     }
@@ -63,7 +120,7 @@ where T: Component + 'static {
     }
 }
 
-struct Game {
+pub struct Game {
     components: Vec<Box<dyn ComponentVec>>,
     num_entities: usize, // includes the free entities
 
@@ -79,24 +136,6 @@ impl Game {
         }
     }
 
-    pub fn add_entity(&mut self) -> Entity {
-        let entity = if self.free_entities.is_empty() {
-            let entity = Entity(self.num_entities);
-            self.num_entities += 1;
-    
-            for component_vec in &mut self.components {
-                component_vec.push_none();
-            }
-
-            entity
-        } else {
-            let entity = self.free_entities.pop().unwrap();
-            entity
-        };
-
-        entity
-    }
-
     pub fn remove_entity(&mut self, entity: Entity) {
         self.free_entities.push(entity);
 
@@ -104,128 +143,363 @@ impl Game {
         for c in self.components.iter_mut() {
             c.set_none(entity.0);
         }
-
-        // remove unused components
+        
         self.components = self.components.drain(..)
             .filter(|c| {
                 let used_component = c.used_component();
                 used_component
             })
-            .collect();
+            .collect::<Vec<_>>();
     }
 
-    pub fn borrow_component_vec<'a, T>(&mut self) -> Option<&Vec<Option<T>>>
+    pub fn query<'a, T>(&'a self) -> Box<dyn Iterator<Item=T::RefType> + 'a>
     where
-        T: Component<'a> + 'static
+        T: Component<'a>
     {
-        // Loop over the type of components'vec to see if there is one matching
-        for component_vec in &self.components {
-            if let Some(component_vec) = component_vec.as_any()
+        T::query(self)
+    }
+
+    pub fn query_mut<'a, T>(&'a mut self) -> Box<dyn Iterator<Item=T::RefMutType> + 'a>
+    where
+        T: Component<'a>
+    {
+        T::query_mut(self)
+    }
+
+    pub fn contains<T>(&self) -> Option<usize>
+    where
+        T: Sized + 'static
+    {
+        let borrowed_c = &self.components;
+
+        let num_c_types = borrowed_c.len();
+        for c_idx in 0..num_c_types {
+            if let Some(_) = borrowed_c[c_idx].as_any()
                 .downcast_ref::<Vec<Option<T>>>()
             {
-                return Some(component_vec);
+                return Some(c_idx);
             }
         }
 
-        return None;
-    } 
-
-    pub fn add_component_to_entity<'a, T>(&mut self, entity: Entity, component: T)
-    where
-        T: Component<'a> + 'static
-    {
-        // Loop over the type of components'vec to see if there is one matching
-        for component_vec in &mut self.components {
-            if let Some(component_vec) = component_vec.as_any_mut()
-                .downcast_mut::<Vec<Option<T>>>()
-            {
-                component_vec[entity.0] = Some(component);
-                return;
-            }
-        }
-
-        // The component type has not been found
-        // create a new one
-        let mut component_vec = Vec::with_capacity(self.num_entities);
-        for i in 0..self.num_entities {
-            component_vec[i] = None;
-        }
-        component_vec[entity.0] = Some(component);
-        // Add it to the list of component
-        self.components.push(Box::new(component_vec));
+        None
     }
 
-    pub fn remove_component_from_entity<'a, T>(&mut self, entity: Entity)
+    fn get<'a, T>(&'a self) -> std::slice::Iter<'a, Option<T>>
     where
-        T: Component<'a> + 'static
+        T: Sized + 'static,
     {
-        // Loop over the type of components'vec to see if there is one matching
-        for (idx, component_vec) in &mut self.components.iter_mut().enumerate() {
-            if let Some(component_vec) = component_vec.as_any_mut()
-                .downcast_mut::<Vec<Option<T>>>()
+        for component_vec in self.components.iter() {
+            if let Some(c) = component_vec.as_any()
+                .downcast_ref::<Vec<Option<T>>>()
             {
-                component_vec.set_none(entity.0);
-                let used_component = component_vec.used_component();
-
-                if !used_component {
-                    self.components.remove(idx);
-                }
-                return;
+                return c.iter();
             }
         }
 
-        // The component type has not been found
-        // Then we do nothing
+        [].iter()
+    }
+
+    unsafe fn get_mut<T>(&mut self) -> Option<*mut Box<dyn ComponentVec>>
+    where
+        T: Sized + 'static,
+    {
+        if let Some(idx) = self.get_index::<T>() {
+            let ptr = self.components
+                .as_mut_ptr()
+                .offset(idx as isize) as *mut Box<dyn ComponentVec>;
+
+            Some(ptr)
+        } else {
+            None
+        }
+    }
+
+    fn get_index<T>(&self) -> Option<usize>
+    where
+        T: Sized + 'static,
+    {
+        for (idx, c) in self.components.iter().enumerate() {
+            if let Some(_) = c.as_any()
+                .downcast_ref::<Vec<Option<T>>>()
+            {
+                return Some(idx);
+            }
+        }
+
+        None
     }
 }
 
-macro_rules! zip {
-    ($x: expr) => ($x);
-    ($x: expr, $($y: expr), +) => (
-        $x.zip(
-            zip!($($y), +))
-    )
-}
+use itertools::izip;
 
 macro_rules! tuple_impls {
-    ( $y:ident ) => {
-        impl<'a, $y: Component<'a> + 'static> Component<'a> for &'a $y
+    ( $t1:ident, $( $t2:ident ),+ ) => {
+        impl<'a, $t1, $($t2),+> Component<'a> for ($t1, $($t2),+ )
+        where
+            $t1: Component<'a> + 'static,
+            $($t2: Component<'a> + 'static,)+
         {
-            fn query(world: &'a Game) -> Box<dyn Iterator<Item=Self>> where Self: 'a {
-                let it = if let Some(components) = world.borrow_component_vec::<$y>() {
-                    components.iter()
-                        .filter_map(|$y| Some($y.as_ref()?) )
-                } else {
-                    std::slice::iter::empty()
+            type RefType = (&'a $t1, $(&'a $t2),+ );
+            type RefMutType = (&'a mut $t1, $(&'a mut $t2),+ );
+
+            fn query(world: &'a Game) -> Box<dyn Iterator<Item=Self::RefType> + 'a> {
+                let $t1 = world.get::<$t1>();
+                let ($($t2),+) = ($( world.get::<$t2>() ),+);
+
+                Box::new(
+                    izip!(
+                        $t1,
+                        $($t2),+
+                    ).filter_map(|( $t1, $($t2),+ )| {
+                        Some( ( $t1.as_ref()?, $($t2.as_ref()?),+ ) )
+                    })
+                )
+            }
+
+            fn query_mut(world: &'a mut Game) -> Box<dyn Iterator<Item=Self::RefMutType> + 'a> {
+                let $t1 = unsafe {
+                    if let Some(c) = world.get_mut::<$t1>() {
+                        (&mut *c).as_any_mut()
+                            .downcast_mut::<Vec<Option<$t1>>>()
+                            .unwrap()
+                    } else {
+                        return Box::new(std::iter::empty());
+                    }
                 };
 
-                Box::new(it)
+                $(
+                    let $t2 = unsafe {
+                        if let Some(c) = world.get_mut::<$t2>() {
+                            (&mut *c).as_any_mut()
+                                .downcast_mut::<Vec<Option<$t2>>>()
+                                .unwrap()
+                        } else {
+                            return Box::new(std::iter::empty());
+                        }
+                    };
+                )+
+
+                Box::new(
+                    izip!($t1, $($t2),+)
+                        .filter_map(|( $t1, $($t2),+ )| {
+                            Some( ( $t1.as_mut()?, $($t2.as_mut()?),+ ) )
+                        })
+                    )
             }
         }
     };
-    /*( $y:ident, $( $x:ident ),+ ) => {
-        impl<'a, $y: Component + 'static, $($x: Component + 'static),+> Component for (&'a $y, $(&'a $x),+ )
-        {
-            fn query(world: &'a Game) -> Box<dyn Iterator<Item=Self>> where Self: 'a {
-                let it = <($( &$x ),+)>::query(world);
-                let it = get::<$y>(world).zip(it)
-                    .filter_map(|($y, $( $x ),+)| {
-                        Some( ($y.as_ref()?, $($x),+ ) )
-                    });
-            
-                
-                Box::new(it)
-            }
+}
+
+tuple_impls! { A, B }
+tuple_impls! { A, B, C }
+tuple_impls! { A, B, C, D }
+tuple_impls! { A, B, C, D, E }
+tuple_impls! { A, B, C, D, E, F }
+tuple_impls! { A, B, C, D, E, F, G }
+tuple_impls! { A, B, C, D, E, F, G, H }
+
+
+mod tests {
+    use crate::core_engine::Component;
+    use crate::ecs;
+    #[derive(Component)]
+    #[derive(Debug)]
+    #[derive(PartialEq)]
+    struct Position(f32);
+
+    #[derive(Component)]
+    #[derive(Debug)]
+    #[derive(PartialEq)]
+    struct Velocity(f32);
+
+    #[test]
+    fn query_position() {
+        use super::{Game, Entity};
+        let mut world = Game::new();
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(0.0))
+            .add(&mut world, Velocity(0.0));
+
+        let pos_vel = world.query::<(Position, Velocity)>().collect::<Vec<_>>();
+        assert_eq!(pos_vel.len(), 1);
+    }
+
+    #[test]
+    fn add_and_remove_component() {
+        use super::{Game, Entity};
+        let mut world = Game::new();
+
+        let entity = Entity::new(&mut world)
+            .add(&mut world, Position(0.0))
+            .add(&mut world, Velocity(0.0));
+
+        entity.remove::<Velocity>(&mut world);
+
+        assert_eq!(world.num_entities, 1);
+        assert_eq!(world.components.len(), 1);
+    }
+
+    #[test]
+    fn add_multiple_entities() {
+        use super::{Game, Entity};
+
+        let mut world = Game::new();
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(1.0));
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(2.0));
+
+        assert_eq!(world.num_entities, 2);
+        assert_eq!(world.components.len(), 1);
+    }
+
+    #[test]
+    fn query_mut_one_component() {
+        use super::{Game, Entity};
+
+        let mut world = Game::new();
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(1.0));
+
+        let _ = Entity::new(&mut world);
+
+        for pos in world.query_mut::<Position>() {
+            pos.0 += 1.0;
         }
-    };*/
-}
 
-fn query<'a, T>(world: &'a Game) -> Box<dyn Iterator<Item=T>>
-where
-    T: Component<'a> + 'static
-{
-    T::query(world)
-}
+        let pos = world.query::<Position>().collect::<Vec<_>>();
+        assert_eq!(pos, vec![&Position(2.0)]);
+    }
 
-tuple_impls! { A }
-//tuple_impls! { A, B }
+    #[test]
+    fn query_mut_two_components() {
+        use super::{Game, Entity};
+
+        let mut world = Game::new();
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(1.0))
+            .add(&mut world, Velocity(2.0));
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(2.0));
+
+        for (p, v) in world.query_mut::<(Position, Velocity)>() {
+            p.0 += 1.0;
+            v.0 += 1.0;
+        }
+
+        let pv = world.query::<(Position, Velocity)>().collect::<Vec<_>>();
+        assert_eq!(pv, vec![(&Position(2.0), &Velocity(3.0))]);
+    }
+
+    #[test]
+    fn query_mut_two_components_bis() {
+        use super::{Game, Entity};
+
+        let mut world = Game::new();
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(1.0));
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(2.0));
+
+        for (p, v) in world.query_mut::<(Position, Velocity)>() {
+            p.0 += 1.0;
+            v.0 += 1.0;
+        }
+
+        let pv = world.query::<(Position, Velocity)>().collect::<Vec<_>>();
+        assert_eq!(pv, vec![]);
+    }
+
+    #[test]
+    fn query_mut_one_component_multiple_times() {
+        use super::{Game, Entity};
+
+        let mut world = Game::new();
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(1.0));
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(2.0));
+
+        for (p1, p2) in world.query_mut::<(Position, Position)>() {
+            p1.0 += 1.0;
+            p2.0 += 1.0;
+        }
+
+        let pv = world.query::<Position>().collect::<Vec<_>>();
+        assert_eq!(pv, vec![&Position(3.0), &Position(4.0)]);
+    }
+
+    #[test]
+    fn add_and_remove_entity() {
+        use super::{Game, Entity};
+
+        let mut world = Game::new();
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(1.0));
+
+        let e2 = Entity::new(&mut world)
+            .add(&mut world, Velocity(2.0));
+
+        world.remove_entity(e2);
+
+        assert_eq!(world.num_entities, 2);
+        assert_eq!(world.free_entities.len(), 1);
+        assert_eq!(world.free_entities[0], e2);
+
+        // check for 1 component
+        assert_eq!(world.components.len(), 1);
+
+        assert!(world.components[0].as_any().downcast_ref::<Vec<Option<Position>>>().is_some());
+
+        let positions = world.query::<Position>().collect::<Vec<_>>();
+        assert_eq!(positions.len(), 1);
+        assert_eq!(*positions[0], Position(1.0));
+    }
+
+    #[test]
+    fn test_entities() {
+        use super::{Game, Entity};
+
+        let mut world = Game::new();
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(1.0));
+
+        let e2 = Entity::new(&mut world)
+            .add(&mut world, Velocity(2.0));
+
+        world.remove_entity(e2);
+
+        let _ = Entity::new(&mut world)
+            .add(&mut world, Position(3.0));
+
+        assert_eq!(world.num_entities, 2);
+        assert_eq!(world.free_entities.len(), 0);
+
+        // check for 1 component
+        assert_eq!(world.components.len(), 1);
+
+        assert!(world.components[0].as_any().downcast_ref::<Vec<Option<Position>>>().is_some());
+
+        let pos = world.query::<Position>().collect::<Vec<_>>();
+        assert_eq!(pos.len(), 2);
+
+        let expected_pos = vec![
+            Position(1.0), Position(3.0)
+        ];
+        for (pos, expected_pos) in pos.into_iter().zip(expected_pos.iter()) {
+            assert_eq!(*pos, *expected_pos);
+        }
+    }
+}

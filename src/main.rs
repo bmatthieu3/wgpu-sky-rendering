@@ -4,6 +4,9 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
+#[macro_use]
+use ::core_engine;
+
 mod texture;
 mod world;
 mod input;
@@ -12,7 +15,7 @@ mod angle;
 mod math;
 mod projection;
 mod triangulation;
-mod ecs;
+pub mod ecs;
 
 use crate::world::World;
 use crate::projection::*;
