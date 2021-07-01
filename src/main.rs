@@ -4,7 +4,6 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
-#[macro_use]
 use ::core_engine;
 
 mod texture;
@@ -17,9 +16,11 @@ mod projection;
 mod triangulation;
 pub mod ecs;
 
-use crate::world::World;
+use crate::world::Game;
 use crate::projection::*;
 use crate::input::CurrentInputFrame;
+
+mod orbit;
 fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
@@ -29,7 +30,7 @@ fn main() {
 
     use futures::executor::block_on;
     // Since main can't be async, we're going to need to block
-    let mut world = block_on(World::new(&window));
+    let mut world = block_on(Game::new(&window));
     let mut input = CurrentInputFrame::new(&mut world);
     #[cfg(target_arch = "wasm32")]
     {

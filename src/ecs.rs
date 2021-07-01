@@ -6,7 +6,7 @@
 pub struct Entity(usize);
 
 impl Entity {
-    pub fn new(world: &mut Game) -> Self {
+    pub fn new(world: &mut World) -> Self {
         let entity = if world.free_entities.is_empty() {
             let entity = Entity(world.num_entities);
             world.num_entities += 1;
@@ -24,7 +24,7 @@ impl Entity {
         entity
     }
 
-    pub fn add<'a, T>(self, world: &'a mut Game, component: T) -> Self
+    pub fn add<'a, T>(self, world: &'a mut World, component: T) -> Self
     where
         T: Component<'a> + 'static
     {
@@ -51,7 +51,7 @@ impl Entity {
         self
     }
 
-    pub fn remove<'a, T>(self, world: &'a mut Game) -> Self
+    pub fn remove<'a, T>(self, world: &'a mut World) -> Self
     where
         T: Component<'a> + 'static
     {
@@ -80,11 +80,11 @@ pub trait Component<'a> {
     type RefType: 'a;
     type RefMutType: 'a;
 
-    fn query(world: &'a Game) -> Box<dyn Iterator<Item=Self::RefType> + 'a>;
-    fn query_mut(world: &'a mut Game) -> Box<dyn Iterator<Item=Self::RefMutType> + 'a>;
+    fn query(world: &'a World) -> Box<dyn Iterator<Item=Self::RefType> + 'a>;
+    fn query_mut(world: &'a mut World) -> Box<dyn Iterator<Item=Self::RefMutType> + 'a>;
 }
 
-trait ComponentVec {
+pub trait ComponentVec {
     fn push_none(&mut self);
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
     fn as_any(&self) -> &dyn std::any::Any;
@@ -119,15 +119,46 @@ where
         used_component
     }
 }
+use std::time;
 
-pub struct Game {
-    components: Vec<Box<dyn ComponentVec>>,
+pub struct World {
+    pub components: Vec<Box<dyn ComponentVec>>,
     num_entities: usize, // includes the free entities
 
     free_entities: Vec<Entity>,
 }
 
-impl Game {
+pub struct SystemManager {
+    systems: Vec<Box<dyn System>>,
+    t: time::Instant,
+}
+
+impl SystemManager {
+    pub fn new() -> Self {
+        let t = time::Instant::now();
+        Self {
+            systems: vec![],
+            t
+        }
+    }
+
+    pub fn register_system<S>(&mut self, system: S) -> &mut Self
+    where
+        S: System + 'static
+    {
+        self.systems.push(Box::new(system));
+
+        self
+    }
+    
+    pub fn run(&self, world: &mut World) {
+        for system in &self.systems {
+            system.run(world, &self.t.elapsed());
+        }
+    }
+}
+
+impl World {
     pub fn new() -> Self {
         Self {
             components: vec![],
@@ -184,7 +215,7 @@ impl Game {
         None
     }
 
-    fn get<'a, T>(&'a self) -> std::slice::Iter<'a, Option<T>>
+    pub fn get<T>(&self) -> std::slice::Iter<'_, Option<T>>
     where
         T: Sized + 'static,
     {
@@ -214,7 +245,7 @@ impl Game {
         }
     }
 
-    fn get_index<T>(&self) -> Option<usize>
+    pub fn get_index<T>(&self) -> Option<usize>
     where
         T: Sized + 'static,
     {
@@ -230,6 +261,12 @@ impl Game {
     }
 }
 
+// A system that will update the position of all the entities
+// having physics components
+pub trait System {
+    fn run(&self, world: &mut World, t: &time::Duration);
+}
+
 use itertools::izip;
 
 macro_rules! tuple_impls {
@@ -242,7 +279,7 @@ macro_rules! tuple_impls {
             type RefType = (&'a $t1, $(&'a $t2),+ );
             type RefMutType = (&'a mut $t1, $(&'a mut $t2),+ );
 
-            fn query(world: &'a Game) -> Box<dyn Iterator<Item=Self::RefType> + 'a> {
+            fn query(world: &'a World) -> Box<dyn Iterator<Item=Self::RefType> + 'a> {
                 let $t1 = world.get::<$t1>();
                 let ($($t2),+) = ($( world.get::<$t2>() ),+);
 
@@ -256,7 +293,7 @@ macro_rules! tuple_impls {
                 )
             }
 
-            fn query_mut(world: &'a mut Game) -> Box<dyn Iterator<Item=Self::RefMutType> + 'a> {
+            fn query_mut(world: &'a mut World) -> Box<dyn Iterator<Item=Self::RefMutType> + 'a> {
                 let $t1 = unsafe {
                     if let Some(c) = world.get_mut::<$t1>() {
                         (&mut *c).as_any_mut()
@@ -284,7 +321,7 @@ macro_rules! tuple_impls {
                         .filter_map(|( $t1, $($t2),+ )| {
                             Some( ( $t1.as_mut()?, $($t2.as_mut()?),+ ) )
                         })
-                    )
+                )
             }
         }
     };
@@ -314,8 +351,8 @@ mod tests {
 
     #[test]
     fn query_position() {
-        use super::{Game, Entity};
-        let mut world = Game::new();
+        use super::{World, Entity};
+        let mut world = World::new();
 
         let _ = Entity::new(&mut world)
             .add(&mut world, Position(0.0))
@@ -327,8 +364,8 @@ mod tests {
 
     #[test]
     fn add_and_remove_component() {
-        use super::{Game, Entity};
-        let mut world = Game::new();
+        use super::{World, Entity};
+        let mut world = World::new();
 
         let entity = Entity::new(&mut world)
             .add(&mut world, Position(0.0))
@@ -342,9 +379,9 @@ mod tests {
 
     #[test]
     fn add_multiple_entities() {
-        use super::{Game, Entity};
+        use super::{World, Entity};
 
-        let mut world = Game::new();
+        let mut world = World::new();
 
         let _ = Entity::new(&mut world)
             .add(&mut world, Position(1.0));
@@ -358,9 +395,9 @@ mod tests {
 
     #[test]
     fn query_mut_one_component() {
-        use super::{Game, Entity};
+        use super::{World, Entity};
 
-        let mut world = Game::new();
+        let mut world = World::new();
 
         let _ = Entity::new(&mut world)
             .add(&mut world, Position(1.0));
@@ -377,9 +414,9 @@ mod tests {
 
     #[test]
     fn query_mut_two_components() {
-        use super::{Game, Entity};
+        use super::{World, Entity};
 
-        let mut world = Game::new();
+        let mut world = World::new();
 
         let _ = Entity::new(&mut world)
             .add(&mut world, Position(1.0))
@@ -399,9 +436,9 @@ mod tests {
 
     #[test]
     fn query_mut_two_components_bis() {
-        use super::{Game, Entity};
+        use super::{World, Entity};
 
-        let mut world = Game::new();
+        let mut world = World::new();
 
         let _ = Entity::new(&mut world)
             .add(&mut world, Position(1.0));
@@ -420,9 +457,9 @@ mod tests {
 
     #[test]
     fn query_mut_one_component_multiple_times() {
-        use super::{Game, Entity};
+        use super::{World, Entity};
 
-        let mut world = Game::new();
+        let mut world = World::new();
 
         let _ = Entity::new(&mut world)
             .add(&mut world, Position(1.0));
@@ -441,9 +478,9 @@ mod tests {
 
     #[test]
     fn add_and_remove_entity() {
-        use super::{Game, Entity};
+        use super::{World, Entity};
 
-        let mut world = Game::new();
+        let mut world = World::new();
 
         let _ = Entity::new(&mut world)
             .add(&mut world, Position(1.0));
@@ -469,9 +506,9 @@ mod tests {
 
     #[test]
     fn test_entities() {
-        use super::{Game, Entity};
+        use super::{World, Entity};
 
-        let mut world = Game::new();
+        let mut world = World::new();
 
         let _ = Entity::new(&mut world)
             .add(&mut world, Position(1.0));
@@ -496,7 +533,8 @@ mod tests {
         assert_eq!(pos.len(), 2);
 
         let expected_pos = vec![
-            Position(1.0), Position(3.0)
+            Position(1.0),
+            Position(3.0)
         ];
         for (pos, expected_pos) in pos.into_iter().zip(expected_pos.iter()) {
             assert_eq!(*pos, *expected_pos);

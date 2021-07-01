@@ -19,10 +19,10 @@ fn impl_component_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let gen = quote! {
 
-        impl<'b> ecs::Component<'b> for #name {
-            type RefType = &'b #name;
-            type RefMutType = &'b mut #name;
-            fn query(world: &'b ecs::Game) -> Box<dyn Iterator<Item=Self::RefType> + 'b> {
+        impl<'a> ecs::Component<'a> for #name {
+            type RefType = &'a #name;
+            type RefMutType = &'a mut #name;
+            fn query(world: &'a ecs::World) -> Box<dyn Iterator<Item=Self::RefType> + 'a> {
                 let it = world.get::<#name>()
                     .filter_map(|a| {
                         Some( a.as_ref()? )
@@ -31,7 +31,7 @@ fn impl_component_macro(ast: &syn::DeriveInput) -> TokenStream {
                 Box::new(it)
             }
 
-            fn query_mut(world: &'b mut ecs::Game) -> Box<dyn Iterator<Item=Self::RefMutType> + 'b> {
+            fn query_mut(world: &'a mut ecs::World) -> Box<dyn Iterator<Item=Self::RefMutType> + 'a> {
                 let it = if let Some(idx) = world.get_index::<#name>() {
                     let mut c = &mut world.components[..];
 

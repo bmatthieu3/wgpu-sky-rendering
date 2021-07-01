@@ -6,15 +6,15 @@ use winit::{dpi::PhysicalPosition, event::{
         VirtualKeyCode, KeyboardInput
     }, event_loop::ControlFlow};
 
-use crate::world::World;
+use crate::world::Game;
 
 enum Data {
     Mouse {
-        action: fn(&mut World, (f32, f32)) -> (),
+        action: fn(&mut Game, (f32, f32)) -> (),
     },
     Key {
         key: VirtualKeyCode,
-        action: fn(&mut World, &mut ControlFlow) -> (),
+        action: fn(&mut Game, &mut ControlFlow) -> (),
     }
 }
 
@@ -35,13 +35,13 @@ use crate::Gnomonic;
 use crate::projection::Projection;
 use crate::math::*;
 impl CurrentInputFrame {
-    pub fn new(state: &mut World) -> Self {
+    pub fn new(state: &mut Game) -> Self {
         let mut actions = HashMap::new();
         actions.insert(
             Input::Key(VirtualKeyCode::Escape),
             Data::Key {
                 key: VirtualKeyCode::Escape,
-                action: |_: &mut World, control_flow: &mut ControlFlow| {
+                action: |_: &mut Game, control_flow: &mut ControlFlow| {
                     *control_flow = ControlFlow::Exit;
                     ()
                 }
@@ -52,7 +52,7 @@ impl CurrentInputFrame {
             Input::Key(VirtualKeyCode::Left),
             Data::Key {
                 key: VirtualKeyCode::Left,
-                action: |world: &mut World, _: &mut ControlFlow| {
+                action: |world: &mut Game, _: &mut ControlFlow| {
                     world.id_proj += 1;
                     world.id_proj %= crate::world::NUM_PROJECTIONS;
 
@@ -64,7 +64,7 @@ impl CurrentInputFrame {
         actions.insert(
             Input::Mouse,
             Data::Mouse {
-                action: |world: &mut World, pos| {
+                action: |world: &mut Game, pos| {
                     let w = world.size.width as f32;
                     let h = world.size.height as f32;
                     let pos_cs = Vec2::new(
@@ -96,7 +96,7 @@ impl CurrentInputFrame {
         }
     }
 
-    pub fn register_frame_events(&self, world: &mut World, event: &WindowEvent, control_flow: &mut ControlFlow) {
+    pub fn register_frame_events(&self, world: &mut Game, event: &WindowEvent, control_flow: &mut ControlFlow) {
         let mut mouse_pos = (0.0, 0.0);
         let input = match event {
             WindowEvent::KeyboardInput { input, .. } => match input {

@@ -8,7 +8,7 @@ use winit::event::WindowEvent;
 
 pub const NUM_PROJECTIONS: i32 = 6;
 
-pub struct World {
+pub struct Game {
     surface: wgpu::Surface,
     device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -33,8 +33,18 @@ pub struct World {
 
     pub clock: std::time::Instant,
     pub id_proj: i32,
+
+    world: World,
+    systems: SystemManager,
 }
 
+use crate::ecs::Entity;
+use crate::ecs::{World, SystemManager};
+use crate::orbit::{
+    Physics,
+    UpdatePhysicsSystem,
+    OrbitData,
+};
 use crate::projection::*;
 use crate::texture::Texture;
 use crate::triangulation::Triangulation;
@@ -76,7 +86,7 @@ pub fn create_position_texture<P: Projection<f32>>(
 use crate::vertex::Vertex;
 use crate::math::Mat4;
 use winit::window::Window;
-impl World {
+impl Game {
     pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
 
@@ -352,6 +362,22 @@ impl World {
 
         let clock = Instant::now();
         let id_proj = 5;
+
+        // Init ECS systems
+        let mut world = World::new();
+        let _ = Entity::new(&mut world)
+            .add(&mut world,  Physics::new(
+                OrbitData::Elliptical {
+                    a: 6378137.0 + 20.0,
+                    e: 0.8,
+                    w: 0.0,
+                }
+            ));
+
+
+        let mut systems = SystemManager::new();
+        systems.register_system(UpdatePhysicsSystem);
+
         let mut app = Self {
             surface,
             device,
@@ -376,6 +402,9 @@ impl World {
             time_buf,
             clock,
             id_proj,
+
+            systems,
+            world,
         };
         app.resize::<Gnomonic>(size);
 
@@ -402,6 +431,8 @@ impl World {
     }
 
     pub fn update(&mut self) {
+        self.systems.run(&mut self.world);
+
         /*
         let rot = Mat4::from_angle_y(cgmath::Rad(elapsed));
         let rot: &[[f32; 4]; 4] = rot.as_ref();

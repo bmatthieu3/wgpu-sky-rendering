@@ -677,6 +677,7 @@ mod tests {
         use cgmath::InnerSpace;
         use cgmath::Vector2;
         use image::{Rgba, RgbaImage};
+        use super::math::Float;
         fn generate_projection_map<P: Projection<f32>>(filename: &str) {
             let (w, h) = (1024.0, 1024.0);
             let mut img = RgbaImage::new(w as u32, h as u32);
