@@ -76,13 +76,19 @@ impl Physics {
 use std::time;
 use autodiff::*;
 use ecs::System;
+use crate::{
+    render::Render,
+    world::Game
+};
 pub struct UpdatePhysicsSystem;
 impl System for UpdatePhysicsSystem {
-    fn run(&self, world: &mut ecs::World, t: &std::time::Duration) {
+    fn run(&self, game: &mut Game, t: &std::time::Duration) {
         let t = t.as_secs_f64();
+        let mut world = &mut game.world;
         // 1. TODO: change the orbital data if thrust power is applied
         // 2. Looping over the physics components to update the satellite positions.
-        for p in world.query_mut::<Physics>() {
+        //let mut spheres = game.spheres_uniform.get_mut();
+        for (p, r) in world.query_mut::<(Physics, Render)>() {
             match p.orbit {
                 OrbitData::Elliptical { a, e, w} => {
                     let E0 = 0.0;
@@ -118,9 +124,18 @@ impl System for UpdatePhysicsSystem {
                     let z = 0.0; // In the equator plane
     
                     p.p = dbg!(Vec3::new(x, y, z));
+
+                    /*match r {
+                        Render::Sphere(idx) => {
+                            get_mut()
+                        },
+                        _ => unimplemented!()
+                    }*/
                 },
                 _ => unimplemented!()
             }
         }
+
+        //game.spheres_uniform
     }
 }

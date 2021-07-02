@@ -562,8 +562,8 @@ where
     /// * `x` - in normalized device coordinates between [-1; 1]
     /// * `y` - in normalized device coordinates between [-1; 1]
     fn clip_to_world_space(pos_clip_space: &Vector2<T>) -> Option<cgmath::Vector4<T>> {
-        let x_2d = pos_clip_space.x * T::PI() * T::from(2.0).unwrap();
-        let y_2d = pos_clip_space.y * T::PI() * T::from(2.0).unwrap();
+        let x_2d = pos_clip_space.x * T::PI();
+        let y_2d = pos_clip_space.y * T::PI();
         let r = x_2d * x_2d + y_2d * y_2d;
 
         let z = (T::one() + r).sqrt();

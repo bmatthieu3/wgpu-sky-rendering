@@ -8,9 +8,22 @@ layout(set = 0, binding = 0) uniform texture2D t_world_pos;
 layout(set = 0, binding = 1) uniform sampler s_world_pos;
 layout(set = 0, binding = 2) uniform texture2D t_map;
 layout(set = 0, binding = 3) uniform sampler s_map;
+
 layout(set = 0, binding = 4)
 uniform RotationMatrix {
     mat4 rot;
+};
+struct Sphere {
+    // Center
+    vec3 c;
+    // Radius
+    float r;
+};
+const int MAX_NUM_OBJECTS = 3;
+
+layout(set = 0, binding = 7)
+uniform Spheres {
+    Sphere s[MAX_NUM_OBJECTS];
 };
 const float TWICE_PI = 6.28318530718f;
 const float PI = 3.141592653589793f;
@@ -180,15 +193,36 @@ HashDxDy hash_with_dxdy(int depth, vec3 p) {
     );
 }
 
+bool intersect_sphere(vec3 origin, vec3 ray, Sphere sp) {
+    vec3 co = origin - sp.c;
+
+    float u_dot_co = dot(ray, co);
+    float co_dot_co = dot(co, co);
+
+    float delta = u_dot_co*u_dot_co - (co_dot_co - sp.r*sp.r);
+    return delta >= 0.0;
+}
+
+
 vec4 get_color(vec3 pos) {
+    // Sky background color definition
     HashDxDy result = hash_with_dxdy(0, pos.zxy);
     int idx = result.idx;
     vec2 uv = vec2(result.dx, result.dy);
-
     vec2 tq = vec2((float(idx) + uv.y)/12.0, uv.x);
+    vec4 sky_color = texture(sampler2D(t_map, s_map), tq);
 
-    return texture(sampler2D(t_map, s_map), tq);
-    //return vec4(1.0, uv.x, uv.y, 1.0);
+    // Planet color definition
+    vec4 planet_color = vec4(1.0);
+
+    vec3 pos_cam_ws = vec3(0.0, 0.0, 0.0);
+    for(int i = 0; i < MAX_NUM_OBJECTS; i++) {
+        if(intersect_sphere(pos_cam_ws, pos, s[i])) {
+            return planet_color;
+        }
+    }
+
+    return sky_color;
 }
 
 void main() {

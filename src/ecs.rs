@@ -151,9 +151,9 @@ impl SystemManager {
         self
     }
     
-    pub fn run(&self, world: &mut World) {
+    pub fn run(&self, game: &mut Game) {
         for system in &self.systems {
-            system.run(world, &self.t.elapsed());
+            system.run(game, &self.t.elapsed());
         }
     }
 }
@@ -261,10 +261,11 @@ impl World {
     }
 }
 
+use crate::world::Game;
 // A system that will update the position of all the entities
 // having physics components
 pub trait System {
-    fn run(&self, world: &mut World, t: &time::Duration);
+    fn run(&self, game: &mut Game, t: &time::Duration);
 }
 
 use itertools::izip;

@@ -77,14 +77,7 @@ impl CurrentInputFrame {
                         let elapsed = world.clock.elapsed().as_secs_f32();
 
                         let rot = rotation_from_direction(&pos_ws, &Vec3::new(0.0, 1.0, 0.0));
-                        let rot: &[[f32; 4]; 4] = rot.as_ref();
-                        //dbg!(rot);
-                        world.queue
-                            .write_buffer(
-                                &world.rot_mat_buf, 
-                                0, 
-                                bytemuck::bytes_of(rot)
-                            );
+                        world.rot_mat_uniform.write(&world.queue, &rot);
                     }
                 }
             }

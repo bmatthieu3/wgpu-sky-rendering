@@ -7,7 +7,8 @@ use wgpu::util::DeviceExt;
 use winit::event::WindowEvent;
 
 pub const NUM_PROJECTIONS: i32 = 6;
-
+use crate::uniform::Uniform;
+use crate::math::Mat3;
 pub struct Game {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -27,15 +28,15 @@ pub struct Game {
     diffuse_bind_group: wgpu::BindGroup,
 
     // uniforms
-    pub rot_mat_buf: wgpu::Buffer,
-    window_size_buf: wgpu::Buffer,
-    time_buf: wgpu::Buffer,
+    pub rot_mat_uniform: Uniform<Mat4<f32>>,
+    window_size_uniform: Uniform<Vec2<f32>>,
+    time_uniform: Uniform<f32>,
+    pub spheres_uniform: Uniform<Vec<Sphere>>,
 
     pub clock: std::time::Instant,
     pub id_proj: i32,
 
-    world: World,
-    systems: SystemManager,
+    pub world: World,
 }
 
 use crate::ecs::Entity;
@@ -83,8 +84,11 @@ pub fn create_position_texture<P: Projection<f32>>(
     let dimensions = (size, size);
     Texture::from_raw_bytes::<f32>(&device, &queue, &texels, dimensions, "position")
 }
-use crate::vertex::Vertex;
-use crate::math::Mat4;
+use crate::{
+    math::{Mat4, Vec3},
+    vertex::Vertex,
+    render::{Sphere, Render, Id},
+};
 use winit::window::Window;
 impl Game {
     pub async fn new(window: &Window) -> Self {
@@ -157,6 +161,27 @@ impl Game {
             mapped_at_creation: false,
         });
 
+        let spheres = [
+            Sphere {
+                c: [5.0, 5.0, 5.0],
+                r: 1.0
+            },
+            Sphere {
+                c: [5.0, -5.0, 5.0],
+                r: 2.0
+            },
+            Sphere {
+                c: [5.0, -5.0, -5.0],
+                r: 0.5
+            }
+        ].into();
+        let spheres_uniform = Uniform::new(&device);
+        spheres_uniform.write(&queue, &spheres);
+
+        let window_size_uniform = Uniform::new(&device);
+        let time_uniform = Uniform::new(&device);
+        let rot_mat_uniform = Uniform::new(&device);
+
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 entries: &[
@@ -199,44 +224,14 @@ impl Game {
                         count: None,
                     },
                     // rot matrix uniform
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 4,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(
-                                std::mem::size_of::<Mat4<f32>>() as _,
-                            ),
-                        },
-                        count: None,
-                    },
+                    rot_mat_uniform.desc_layout(4, wgpu::ShaderStage::FRAGMENT),
                     // window size uniform
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 5,
-                        visibility: wgpu::ShaderStage::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(
-                                std::mem::size_of::<Vec2<f32>>() as wgpu::BufferAddress,
-                            ),
-                        },
-                        count: None,
-                    },
+                    window_size_uniform.desc_layout(5, wgpu::ShaderStage::VERTEX),
                     // time uniform
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 6,
-                        visibility: wgpu::ShaderStage::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: wgpu::BufferSize::new(
-                                std::mem::size_of::<f32>() as wgpu::BufferAddress,
-                            ),
-                        },
-                        count: None,
-                    },
+                    time_uniform.desc_layout(6, wgpu::ShaderStage::VERTEX),
+
+                    // spherical objects uniform
+                    spheres_uniform.desc_layout(7, wgpu::ShaderStage::FRAGMENT),
                 ],
                 label: Some("texture_bind_group_layout"),
             });
@@ -260,36 +255,10 @@ impl Game {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&map_texture.sampler),
                 },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &rot_mat_buf,
-                        offset: 0,
-                        size: wgpu::BufferSize::new(
-                            std::mem::size_of::<Mat4<f32>>() as wgpu::BufferAddress
-                        ),
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &window_size_buf,
-                        offset: 0,
-                        size: wgpu::BufferSize::new(
-                            std::mem::size_of::<Vec2<f32>>() as wgpu::BufferAddress
-                        ),
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &time_buf,
-                        offset: 0,
-                        size: wgpu::BufferSize::new(
-                            std::mem::size_of::<f32>() as wgpu::BufferAddress
-                        ),
-                    }),
-                },
+                rot_mat_uniform.desc(4),
+                window_size_uniform.desc(5),
+                time_uniform.desc(6),
+                spheres_uniform.desc(7),
             ],
             label: Some("diffuse_bind_group"),
         });
@@ -372,11 +341,8 @@ impl Game {
                     e: 0.8,
                     w: 0.0,
                 }
-            ));
-
-
-        let mut systems = SystemManager::new();
-        systems.register_system(UpdatePhysicsSystem);
+            ))
+            .add(&mut world, Render::Sphere(Id::new(0)));
 
         let mut app = Self {
             surface,
@@ -397,13 +363,13 @@ impl Game {
             diffuse_bind_group,
 
             // uniforms
-            window_size_buf,
-            rot_mat_buf,
-            time_buf,
+            window_size_uniform,
+            rot_mat_uniform,
+            time_uniform,
+            spheres_uniform,
             clock,
             id_proj,
 
-            systems,
             world,
         };
         app.resize::<Gnomonic>(size);
@@ -418,11 +384,7 @@ impl Game {
         self.swap_chain = self.device.create_swap_chain(&self.surface, &self.sc_desc);
 
         let ndc = P::compute_ndc_to_clip_factor(self.size.width as f32, self.size.height as f32);
-        self.queue.write_buffer(
-            &self.window_size_buf,
-            0,
-            bytemuck::bytes_of(&[ndc.x, ndc.y]),
-        );
+        self.window_size_uniform.write(&self.queue, &ndc);
     }
 
     #[allow(unused_variables)]
@@ -430,9 +392,8 @@ impl Game {
         false
     }
 
-    pub fn update(&mut self) {
-        self.systems.run(&mut self.world);
-
+    pub fn update(&mut self, systems: &mut SystemManager) {
+        systems.run(self);
         /*
         let rot = Mat4::from_angle_y(cgmath::Rad(elapsed));
         let rot: &[[f32; 4]; 4] = rot.as_ref();
@@ -440,8 +401,7 @@ impl Game {
         self.queue
             .write_buffer(&self.rot_mat_buf, 0, bytemuck::bytes_of(rot));*/
         let elapsed = self.clock.elapsed().as_secs_f32();
-        self.queue
-            .write_buffer(&self.time_buf, 0, bytemuck::bytes_of(&elapsed));
+        self.time_uniform.write(&self.queue, &elapsed);
     }
 
     pub fn set_projection(&mut self) {
@@ -496,11 +456,7 @@ impl Game {
             ),
             _ => unimplemented!(),
         };
-        self.queue.write_buffer(
-            &self.window_size_buf,
-            0,
-            bytemuck::bytes_of(&[aspect.x, aspect.y]),
-        );
+        self.window_size_uniform.write(&self.queue, &aspect);
 
         // Update the bind group with the texture position from the current projection
         self.diffuse_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -526,26 +482,8 @@ impl Game {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&self.map_texture.sampler),
                 },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &self.rot_mat_buf,
-                        offset: 0,
-                        size: wgpu::BufferSize::new(
-                            std::mem::size_of::<Mat4<f32>>() as wgpu::BufferAddress
-                        ),
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &self.window_size_buf,
-                        offset: 0,
-                        size: wgpu::BufferSize::new(
-                            std::mem::size_of::<Vec2<f32>>() as wgpu::BufferAddress
-                        ),
-                    }),
-                },
+                self.rot_mat_uniform.desc(4),
+                self.window_size_uniform.desc(5),
             ],
             label: Some("diffuse_bind_group"),
         });
