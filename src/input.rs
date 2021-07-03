@@ -53,10 +53,7 @@ impl CurrentInputFrame {
             Data::Key {
                 key: VirtualKeyCode::Left,
                 action: |world: &mut Game, _: &mut ControlFlow| {
-                    world.id_proj += 1;
-                    world.id_proj %= crate::world::NUM_PROJECTIONS;
-
-                    world.set_projection();
+                    todo!();
                 }
             }
         );

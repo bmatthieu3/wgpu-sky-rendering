@@ -74,6 +74,21 @@ impl Entity {
         // Then we do nothing
         self
     }
+
+    pub fn get<'a, T>(&self, world: &'a World) -> Option<&'a T>
+    where
+        T: Component<'a> + 'static
+    {
+        for component_vec in world.components.iter() {
+            if let Some(c) = component_vec.as_any()
+                .downcast_ref::<Vec<Option<T>>>()
+            {
+                return c[self.0].as_ref();
+            }
+        }
+
+        None
+    }
 }
 
 pub trait Component<'a> {

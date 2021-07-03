@@ -8,7 +8,6 @@ use winit::event::WindowEvent;
 
 pub const NUM_PROJECTIONS: i32 = 6;
 use crate::uniform::Uniform;
-use crate::math::Mat3;
 pub struct Game {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -16,26 +15,25 @@ pub struct Game {
     sc_desc: wgpu::SwapChainDescriptor,
     swap_chain: wgpu::SwapChain,
     pub size: winit::dpi::PhysicalSize<u32>,
+    // Ray tracing rendering pipeline
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     num_indices: u32,
-    // NEW!
-    #[allow(dead_code)]
-    projection_textures: [Texture; NUM_PROJECTIONS as usize],
-    map_texture: Texture,
+    map_tex: Texture,
+    gnomonic_projection_tex: Texture,
+
     texture_bind_group_layout: wgpu::BindGroupLayout,
     diffuse_bind_group: wgpu::BindGroup,
-
-    // uniforms
+    // Standard rasterizer rendering pipeline
+    
+    // Uniforms (can be send to multiple rendering pipelines)
     pub rot_mat_uniform: Uniform<Mat4<f32>>,
     window_size_uniform: Uniform<Vec2<f32>>,
     time_uniform: Uniform<f32>,
     pub spheres_uniform: Uniform<Vec<Sphere>>,
 
     pub clock: std::time::Instant,
-    pub id_proj: i32,
-
     pub world: World,
 }
 
@@ -127,17 +125,11 @@ impl Game {
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
         // Texture loading
-        let projection_textures = [
-            create_position_texture::<Aitoff>(&device, &queue, 512),
-            create_position_texture::<Ortho>(&device, &queue, 512),
-            create_position_texture::<Mollweide>(&device, &queue, 512),
-            create_position_texture::<Mercator>(&device, &queue, 512),
-            create_position_texture::<AzimuthalEquidistant>(&device, &queue, 512),
-            create_position_texture::<Gnomonic>(&device, &queue, 512),
-        ];
+        let gnomonic_projection_tex = create_position_texture::<Gnomonic>(&device, &queue, 512);
+
         let bytes = include_bytes!("../img/map.png");
         let img = image::load_from_memory(bytes).unwrap();
-        let map_texture = Texture::from_image(&device, &queue, &img, "map.png");
+        let map_tex = Texture::from_image(&device, &queue, &img, "map.png");
 
         // Uniform buffer
         let rot_mat_buf = device.create_buffer(&wgpu::BufferDescriptor {
@@ -241,19 +233,19 @@ impl Game {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&projection_textures[5].view),
+                    resource: wgpu::BindingResource::TextureView(&gnomonic_projection_tex.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&projection_textures[5].sampler),
+                    resource: wgpu::BindingResource::Sampler(&gnomonic_projection_tex.sampler),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&map_texture.view),
+                    resource: wgpu::BindingResource::TextureView(&map_tex.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&map_texture.sampler),
+                    resource: wgpu::BindingResource::Sampler(&map_tex.sampler),
                 },
                 rot_mat_uniform.desc(4),
                 window_size_uniform.desc(5),
@@ -334,15 +326,50 @@ impl Game {
 
         // Init ECS systems
         let mut world = World::new();
-        let _ = Entity::new(&mut world)
-            .add(&mut world,  Physics::new(
-                OrbitData::Elliptical {
-                    a: 6378137.0 + 20.0,
+        let sun = Entity::new(&mut world);
+        let planet = Entity::new(&mut world);
+        let moon = Entity::new(&mut world);
+
+        sun.add(&mut world,  Physics::Static {
+                mu: 100.0,
+                p: Vec3::new(0.0, 0.0, 0.0)
+            })
+            .add(&mut world, Render::Sphere(
+                Sphere {
+                    c: [0.0, 0.0, 0.0],
+                    r: 1.0
+                }
+            ));
+        planet.add(&mut world,  Physics::orbit(
+            sun,
+                10.0,
+            OrbitData::Elliptical {
+                    a: 5.0,
                     e: 0.8,
-                    w: 0.0,
+                    w: 0.0
                 }
             ))
-            .add(&mut world, Render::Sphere(Id::new(0)));
+            .add(&mut world, Render::Sphere(
+                Sphere {
+                    c: [5.0, 0.0, 0.0],
+                    r: 0.1
+                }
+            ));
+        moon.add(&mut world,  Physics::orbit(
+            planet,
+                10.0,
+                OrbitData::Elliptical {
+                    a: 1.0,
+                    e: 0.9,
+                    w: 0.0
+                }
+            ))
+            .add(&mut world, Render::Sphere(
+                Sphere {
+                    c: [5.0, 0.0, 0.0],
+                    r: 0.05
+                }
+            ));
 
         let mut app = Self {
             surface,
@@ -356,8 +383,8 @@ impl Game {
             index_buffer,
             num_indices,
 
-            projection_textures,
-            map_texture,
+            gnomonic_projection_tex,
+            map_tex,
 
             texture_bind_group_layout,
             diffuse_bind_group,
@@ -368,7 +395,6 @@ impl Game {
             time_uniform,
             spheres_uniform,
             clock,
-            id_proj,
 
             world,
         };
@@ -394,99 +420,9 @@ impl Game {
 
     pub fn update(&mut self, systems: &mut SystemManager) {
         systems.run(self);
-        /*
-        let rot = Mat4::from_angle_y(cgmath::Rad(elapsed));
-        let rot: &[[f32; 4]; 4] = rot.as_ref();
 
-        self.queue
-            .write_buffer(&self.rot_mat_buf, 0, bytemuck::bytes_of(rot));*/
         let elapsed = self.clock.elapsed().as_secs_f32();
         self.time_uniform.write(&self.queue, &elapsed);
-    }
-
-    pub fn set_projection(&mut self) {
-        // Update the vertex and index buffers
-        let (vertices, indices) = match self.id_proj {
-            0 => Triangulation::create::<Aitoff>(),
-            1 => Triangulation::create::<Ortho>(),
-            2 => Triangulation::create::<Mollweide>(),
-            3 => Triangulation::create::<Mercator>(),
-            4 => Triangulation::create::<AzimuthalEquidistant>(),
-            5 => Triangulation::create::<Gnomonic>(),
-            _ => unimplemented!(),
-        };
-
-        self.vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsage::VERTEX,
-            });
-        self.index_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(&indices),
-                usage: wgpu::BufferUsage::INDEX,
-            });
-        self.num_indices = indices.len() as u32;
-
-        // Update the uniforms
-        let aspect = match self.id_proj {
-            0 => {
-                Aitoff::compute_ndc_to_clip_factor(self.size.width as f32, self.size.height as f32)
-            }
-            1 => Ortho::compute_ndc_to_clip_factor(self.size.width as f32, self.size.height as f32),
-            2 => Mollweide::compute_ndc_to_clip_factor(
-                self.size.width as f32,
-                self.size.height as f32,
-            ),
-            3 => Mercator::compute_ndc_to_clip_factor(
-                self.size.width as f32,
-                self.size.height as f32,
-            ),
-            4 => AzimuthalEquidistant::compute_ndc_to_clip_factor(
-                self.size.width as f32,
-                self.size.height as f32,
-            ),
-            5 => Gnomonic::compute_ndc_to_clip_factor(
-                self.size.width as f32,
-                self.size.height as f32,
-            ),
-            _ => unimplemented!(),
-        };
-        self.window_size_uniform.write(&self.queue, &aspect);
-
-        // Update the bind group with the texture position from the current projection
-        self.diffuse_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &self.texture_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(
-                        &self.projection_textures[self.id_proj as usize].view,
-                    ),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(
-                        &self.projection_textures[self.id_proj as usize].sampler,
-                    ),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&self.map_texture.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&self.map_texture.sampler),
-                },
-                self.rot_mat_uniform.desc(4),
-                self.window_size_uniform.desc(5),
-            ],
-            label: Some("diffuse_bind_group"),
-        });
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SwapChainError> {

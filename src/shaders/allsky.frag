@@ -2,6 +2,8 @@
 #version 440
 
 layout(location=0) in vec2 pos_cs;
+layout(location=1) in float time;
+
 layout(location=0) out vec4 f_color;
 
 layout(set = 0, binding = 0) uniform texture2D t_world_pos;
@@ -13,6 +15,7 @@ layout(set = 0, binding = 4)
 uniform RotationMatrix {
     mat4 rot;
 };
+
 struct Sphere {
     // Center
     vec3 c;
@@ -197,10 +200,14 @@ bool intersect_sphere(vec3 origin, vec3 ray, Sphere sp) {
     vec3 co = origin - sp.c;
 
     float u_dot_co = dot(ray, co);
-    float co_dot_co = dot(co, co);
+    if(u_dot_co < 0.0) {
+        float co_dot_co = dot(co, co);
 
-    float delta = u_dot_co*u_dot_co - (co_dot_co - sp.r*sp.r);
-    return delta >= 0.0;
+        float delta = u_dot_co*u_dot_co - (co_dot_co - sp.r*sp.r);
+        return delta >= 0.0;
+    } else {
+        return false;
+    }
 }
 
 
@@ -228,9 +235,9 @@ vec4 get_color(vec3 pos) {
 void main() {
     // Retrieve the position from the texture
     vec3 pos_ws = texture(sampler2D(t_world_pos, s_world_pos), pos_cs).rgb;
+
     // Rotate it
     vec3 rotated_p = vec3(rot * vec4(pos_ws, 1.0));
-
     f_color = get_color(rotated_p);
 }
  

@@ -16,5 +16,5 @@ impl<T> Id<T> {
 }
 #[derive(Component)]
 pub enum Render {
-    Sphere(Id<Sphere>),
+    Sphere(Sphere),
 }
