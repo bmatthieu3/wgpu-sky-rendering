@@ -6,7 +6,6 @@ use wgpu::util::DeviceExt;
 
 use winit::event::WindowEvent;
 
-pub const NUM_PROJECTIONS: i32 = 6;
 use crate::uniform::Uniform;
 pub struct Game {
     surface: wgpu::Surface,
@@ -49,6 +48,7 @@ use crate::texture::Texture;
 use crate::triangulation::Triangulation;
 use cgmath::InnerSpace;
 use crate::math::Vec2;
+use crate::orbit::Orbit;
 
 fn generate_position<P: Projection<f32>>(size: usize) -> Vec<f32> {
     let (w, h) = (size as f32, size as f32);
@@ -340,7 +340,7 @@ impl Game {
                     r: 1.0
                 }
             ));
-        planet.add(&mut world,  Physics::orbit(
+        planet.add(&mut world,  Physics::Orbit(Orbit::from_orbital_geometry(
             sun,
                 10.0,
             OrbitData::Elliptical {
@@ -348,14 +348,14 @@ impl Game {
                     e: 0.8,
                     w: 0.0
                 }
-            ))
+            )))
             .add(&mut world, Render::Sphere(
                 Sphere {
                     c: [5.0, 0.0, 0.0],
                     r: 0.2
                 }
             ));
-        moon.add(&mut world,  Physics::orbit(
+        moon.add(&mut world,  Physics::Orbit(Orbit::from_orbital_geometry(
             planet,
                 10.0,
                 OrbitData::Elliptical {
@@ -363,7 +363,7 @@ impl Game {
                     e: 0.9,
                     w: 0.0
                 }
-            ))
+            )))
             .add(&mut world, Render::Sphere(
                 Sphere {
                     c: [5.0, 0.0, 0.0],

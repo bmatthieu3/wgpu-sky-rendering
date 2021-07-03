@@ -21,6 +21,58 @@ where
     Hyperbolic, // TODO
 }
 
+pub struct Orbit {
+    // body around which orbiting
+    primary_body: Entity,
+    // position vector
+    p: Vec3<f64>,
+    // velocity magnitude
+    v: f64,
+    // true anomaly (angular distance of the body past the point of periapsis) in radians
+    nu: f64,
+    // distance to its primary body
+    r: f64,
+    // mu = m * G product of the body
+    mu: f64,
+    // zenith angle (angle between position and the velocity vector)
+    gamma: f64,
+    // orbit data
+    data: OrbitData<f64>,
+}
+
+impl Orbit {
+    // Define a orbit from:
+    // - the mass (or product G*M of the star: mu)
+    // - the orbit data
+    pub fn from_orbital_geometry(primary_body: Entity, mu: f64, data: OrbitData<f64>) -> Self {
+        Self {
+            primary_body,
+            mu,
+            p: Vec3::zero(),
+            nu: 0.0,
+            r: 0.0,
+            v: 0.0,
+            gamma: 0.0,
+            data
+        }
+    }
+
+    // Define an orbit from:
+    // - the mass (mu)
+    // - the true anomaly
+    // - the distance from its primary body
+    // - the velocity at that point
+    pub fn from_physical_characteristics(primary_body: Entity, mu: f64, nu: f64, r: f32, v: f32) -> Self {
+        todo!();
+    }
+
+    fn set_primary_body(&mut self, entity: Entity) {
+        self.primary_body = entity;
+        // Change the geometry of the orbit
+        todo!();
+    }
+}
+
 use super::{
     math::{
         Vec3,
@@ -47,52 +99,13 @@ const m_moon: f64 = 7.348e22; // kg
 use ecs::Entity;
 #[derive(Component)]
 pub enum Physics {
-    Orbit {
-        // body around which orbiting
-        primary_body: Entity,
-        // position vector
-        p: Vec3<f64>,
-        // velocity magnitude
-        v: f64,
-        // true anomaly (angular distance of the body past the point of periapsis) in radians
-        nu: f64,
-        // distance to its primary body
-        r: f64,
-        // mu = m * G product of the body
-        mu: f64,
-        // zenith angle (angle between position and the velocity vector)
-        gamma: f64,
-        // orbit data
-        data: OrbitData<f64>,
-    },
+    Orbit(Orbit),
     // The body is static
     Static {
         // position vector
         p: Vec3<f64>,
         // mu = m * G product of the body
         mu: f64,
-    }
-}
-
-impl Physics {
-    pub fn orbit(primary_body: Entity, mu: f64, data: OrbitData<f64>) -> Self {
-        Self::Orbit {
-            primary_body,
-            mu,
-            p: Vec3::zero(),
-            v: 0.0,
-            nu: 0.0,
-            r: 0.0,
-            gamma: 0.0,
-            data
-        }
-    }
-
-    pub fn static_object(mu: f64, p: Vec3<f64>) -> Self {
-        Self::Static {
-            p,
-            mu,
-        }
     }
 }
 
@@ -108,13 +121,14 @@ impl System for UpdatePhysicsSystem {
     fn run(&self, game: &mut Game, t: &std::time::Duration) {
         let t = t.as_secs_f64();
         let mut world = &mut game.world;
+        // Get the mu and position of the entities primatry bodies
         let prim_bodies_physics = world.query::<(Physics, Render)>()
             .map(|(physic, _)| {
                 match physic {
-                    Physics::Orbit { primary_body, ..} => {
+                    Physics::Orbit(Orbit {primary_body, ..}) => {
                         let physic_prim_body = primary_body.get::<Physics>(world).unwrap();
                         match physic_prim_body {
-                            &Physics::Orbit { p, mu, ..} => (mu, p),
+                            &Physics::Orbit(Orbit { p, mu, ..}) => (mu, p),
                             &Physics::Static { p, mu } => (mu, p)
                         }
                     },
@@ -131,7 +145,7 @@ impl System for UpdatePhysicsSystem {
         let mut spheres = vec![];
         for (idx, (physic, render)) in world.query_mut::<(Physics, Render)>().enumerate() {
             match physic {
-                Physics::Orbit { p, gamma, v, nu, r, data, .. } => {
+                Physics::Orbit(Orbit { p, gamma, v, nu, r, data, .. }) => {
                     match *data {
                         OrbitData::Elliptical { a, e, w} => {
                             let E0 = 0.0;
@@ -194,7 +208,7 @@ impl System for UpdatePhysicsSystem {
                 _ => unimplemented!()
             }
         }
-        
-        game.spheres_uniform.write(&game.queue, &dbg!(spheres));
+
+        game.spheres_uniform.write(&game.queue, &spheres);
     }
 }

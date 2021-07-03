@@ -53,8 +53,6 @@ fn main() {
             .expect("Append canvas to HTML body");
     }
 
-    let mut count: i32 = 5;
-
     event_loop.run(move |event, _, control_flow| {
         match event {
             Event::WindowEvent {
@@ -65,26 +63,11 @@ fn main() {
                 if !game.input(event) {
                     match event {
                         WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::Resized(physical_size) => match count {
-                            0 => game.resize::<Aitoff>(*physical_size),
-                            1 => game.resize::<Ortho>(*physical_size),
-                            2 => game.resize::<Mollweide>(*physical_size),
-                            3 => game.resize::<Mercator>(*physical_size),
-                            4 => game.resize::<AzimuthalEquidistant>(*physical_size),
-                            5 => game.resize::<Gnomonic>(*physical_size),
-                            _ => unimplemented!(),
+                        WindowEvent::Resized(physical_size) => {
+                            game.resize::<Gnomonic>(*physical_size);
                         },
                         WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            // new_inner_size is &mut so w have to dereference it twice
-                            match count {
-                                0 => game.resize::<Aitoff>(**new_inner_size),
-                                1 => game.resize::<Ortho>(**new_inner_size),
-                                2 => game.resize::<Mollweide>(**new_inner_size),
-                                3 => game.resize::<Mercator>(**new_inner_size),
-                                4 => game.resize::<AzimuthalEquidistant>(**new_inner_size),
-                                5 => game.resize::<Gnomonic>(**new_inner_size),
-                                _ => unimplemented!(),
-                            }
+                            game.resize::<Gnomonic>(**new_inner_size);
                         }
                         _ => {}
                     }
@@ -95,14 +78,8 @@ fn main() {
                 match game.render() {
                     Ok(_) => {}
                     // Recreate the swap_chain if lost
-                    Err(wgpu::SwapChainError::Lost) => match count {
-                        0 => game.resize::<Aitoff>(game.size),
-                        1 => game.resize::<Ortho>(game.size),
-                        2 => game.resize::<Mollweide>(game.size),
-                        3 => game.resize::<Mercator>(game.size),
-                        4 => game.resize::<AzimuthalEquidistant>(game.size),
-                        5 => game.resize::<Gnomonic>(game.size),
-                        _ => unimplemented!(),
+                    Err(wgpu::SwapChainError::Lost) => {
+                        game.resize::<Gnomonic>(game.size);
                     },
                     // The system is out of memory, we should probably quit
                     Err(wgpu::SwapChainError::OutOfMemory) => *control_flow = ControlFlow::Exit,
