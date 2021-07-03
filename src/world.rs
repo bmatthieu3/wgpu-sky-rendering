@@ -332,7 +332,7 @@ impl Game {
 
         sun.add(&mut world,  Physics::Static {
                 mu: 100.0,
-                p: Vec3::new(0.0, 0.0, 0.0)
+                p: Vec3::new(3.0, 3.0, 3.0)
             })
             .add(&mut world, Render::Sphere(
                 Sphere {
@@ -352,7 +352,7 @@ impl Game {
             .add(&mut world, Render::Sphere(
                 Sphere {
                     c: [5.0, 0.0, 0.0],
-                    r: 0.1
+                    r: 0.2
                 }
             ));
         moon.add(&mut world,  Physics::orbit(
@@ -367,7 +367,7 @@ impl Game {
             .add(&mut world, Render::Sphere(
                 Sphere {
                     c: [5.0, 0.0, 0.0],
-                    r: 0.05
+                    r: 0.1
                 }
             ));
 

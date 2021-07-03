@@ -182,7 +182,15 @@ impl System for UpdatePhysicsSystem {
                         _ => unimplemented!()
                     }
                 },
-                Physics::Static { .. } => (),
+                Physics::Static { p, .. } => {
+                    match render {
+                        Render::Sphere(s) => {
+                            s.c = [p.x as f32, p.y as f32, p.z as f32];
+                            spheres.push(*s);
+                        },
+                        _ => unimplemented!()
+                    }
+                },
                 _ => unimplemented!()
             }
         }
