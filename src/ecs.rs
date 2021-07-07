@@ -3,8 +3,9 @@
 #[derive(Clone, Copy)]
 #[derive(PartialEq, Eq)]
 #[derive(Debug)]
-pub struct Entity(usize);
+pub struct Entity(pub usize);
 
+use crate::shared::Shared;
 impl Entity {
     pub fn new(world: &mut World) -> Self {
         let entity = if world.free_entities.is_empty() {
@@ -24,7 +25,7 @@ impl Entity {
         entity
     }
 
-    pub fn add<'a, T>(self, world: &'a mut World, component: T) -> Self
+    pub fn add<'a, T>(self, component: T, world: &'a mut World) -> Self
     where
         T: Component<'a> + 'static
     {
@@ -89,6 +90,28 @@ impl Entity {
 
         None
     }
+
+    pub fn get_mut<'a, T>(&self, mut world: &'a mut World) -> Option<&'a mut T>
+    where
+        T: Component<'a> + 'static
+    {
+        for component_vec in world.components.iter_mut() {
+            if let Some(c) = component_vec.as_any_mut()
+                .downcast_mut::<Vec<Option<T>>>()
+            {
+                return c[self.0].as_mut();
+            }
+        }
+
+        None
+    }
+
+    pub fn set<'a, T>(&self, world: &'a mut World, v: T)
+    where
+        T: Component<'a> + 'static
+    {
+        self.add(v, world);
+    }
 }
 
 pub trait Component<'a> {
@@ -96,6 +119,8 @@ pub trait Component<'a> {
     type RefMutType: 'a;
 
     fn query(world: &'a World) -> Box<dyn Iterator<Item=Self::RefType> + 'a>;
+    fn query_with_entity(world: &'a World) -> Box<dyn Iterator<Item=(Entity, Self::RefType)> + 'a>;
+
     fn query_mut(world: &'a mut World) -> Box<dyn Iterator<Item=Self::RefMutType> + 'a>;
 }
 
@@ -134,7 +159,7 @@ where
         used_component
     }
 }
-use std::time;
+use std::{fmt::Debug, time};
 
 pub struct World {
     pub components: Vec<Box<dyn ComponentVec>>,
@@ -203,6 +228,13 @@ impl World {
         T: Component<'a>
     {
         T::query(self)
+    }
+
+    pub fn query_with_entity<'a, T>(&'a self) -> Box<dyn Iterator<Item=(Entity, T::RefType)> + 'a>
+    where
+        T: Component<'a>,
+    {
+        T::query_with_entity(self)
     }
 
     pub fn query_mut<'a, T>(&'a mut self) -> Box<dyn Iterator<Item=T::RefMutType> + 'a>
@@ -309,6 +341,22 @@ macro_rules! tuple_impls {
                 )
             }
 
+            fn query_with_entity(world: &'a World) -> Box<dyn Iterator<Item=(Entity, Self::RefType)> + 'a> {
+                let $t1 = world.get::<$t1>();
+                let ($($t2),+) = ($( world.get::<$t2>() ),+);
+
+                Box::new(
+                    izip!(
+                        $t1,
+                        $($t2),+
+                    )
+                    .enumerate()
+                    .filter_map(|(entity, ( $t1, $($t2),+ ))| {
+                        Some( (Entity(entity), ( $t1.as_ref()?, $($t2.as_ref()?),+ )) )
+                    })
+                )
+            }
+
             fn query_mut(world: &'a mut World) -> Box<dyn Iterator<Item=Self::RefMutType> + 'a> {
                 let $t1 = unsafe {
                     if let Some(c) = world.get_mut::<$t1>() {
@@ -371,8 +419,8 @@ mod tests {
         let mut world = World::new();
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(0.0))
-            .add(&mut world, Velocity(0.0));
+            .add(Position(0.0), &mut world)
+            .add(Velocity(0.0), &mut world);
 
         let pos_vel = world.query::<(Position, Velocity)>().collect::<Vec<_>>();
         assert_eq!(pos_vel.len(), 1);
@@ -384,8 +432,8 @@ mod tests {
         let mut world = World::new();
 
         let entity = Entity::new(&mut world)
-            .add(&mut world, Position(0.0))
-            .add(&mut world, Velocity(0.0));
+            .add(Position(0.0), &mut world)
+            .add(Velocity(0.0), &mut world);
 
         entity.remove::<Velocity>(&mut world);
 
@@ -400,10 +448,10 @@ mod tests {
         let mut world = World::new();
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(1.0));
+            .add(Position(1.0), &mut world);
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(2.0));
+            .add(Position(2.0), &mut world, );
 
         assert_eq!(world.num_entities, 2);
         assert_eq!(world.components.len(), 1);
@@ -416,7 +464,7 @@ mod tests {
         let mut world = World::new();
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(1.0));
+            .add(Position(1.0), &mut world, );
 
         let _ = Entity::new(&mut world);
 
@@ -435,11 +483,11 @@ mod tests {
         let mut world = World::new();
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(1.0))
-            .add(&mut world, Velocity(2.0));
+            .add(Position(1.0), &mut world, )
+            .add(Velocity(2.0), &mut world, );
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(2.0));
+            .add(Position(2.0), &mut world, );
 
         for (p, v) in world.query_mut::<(Position, Velocity)>() {
             p.0 += 1.0;
@@ -457,10 +505,10 @@ mod tests {
         let mut world = World::new();
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(1.0));
+            .add(Position(1.0), &mut world, );
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(2.0));
+            .add(Position(2.0), &mut world, );
 
         for (p, v) in world.query_mut::<(Position, Velocity)>() {
             p.0 += 1.0;
@@ -478,10 +526,10 @@ mod tests {
         let mut world = World::new();
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(1.0));
+            .add(Position(1.0), &mut world, );
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(2.0));
+            .add(Position(2.0), &mut world, );
 
         for (p1, p2) in world.query_mut::<(Position, Position)>() {
             p1.0 += 1.0;
@@ -499,10 +547,10 @@ mod tests {
         let mut world = World::new();
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(1.0));
+            .add(Position(1.0), &mut world, );
 
         let e2 = Entity::new(&mut world)
-            .add(&mut world, Velocity(2.0));
+            .add(Velocity(2.0), &mut world, );
 
         world.remove_entity(e2);
 
@@ -527,15 +575,15 @@ mod tests {
         let mut world = World::new();
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(1.0));
+            .add(Position(1.0), &mut world, );
 
         let e2 = Entity::new(&mut world)
-            .add(&mut world, Velocity(2.0));
+            .add(Velocity(2.0), &mut world, );
 
         world.remove_entity(e2);
 
         let _ = Entity::new(&mut world)
-            .add(&mut world, Position(3.0));
+            .add(Position(3.0), &mut world, );
 
         assert_eq!(world.num_entities, 2);
         assert_eq!(world.free_entities.len(), 0);

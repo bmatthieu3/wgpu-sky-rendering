@@ -4,9 +4,17 @@ use std::iter;
 use std::time::Instant;
 use wgpu::util::DeviceExt;
 
-use winit::event::WindowEvent;
+use winit::{
+    event_loop::ControlFlow,
+    event::WindowEvent
+};
 
-use crate::uniform::Uniform;
+use crate::shared::Shared;
+
+use crate::camera::Camera;
+use crate::input::InputGameState;
+use crate::uniform::UniformBuffer;
+use crate::camera::CameraData;
 pub struct Game {
     surface: wgpu::Surface,
     device: wgpu::Device,
@@ -27,28 +35,30 @@ pub struct Game {
     // Standard rasterizer rendering pipeline
     
     // Uniforms (can be send to multiple rendering pipelines)
-    pub rot_mat_uniform: Uniform<Mat4<f32>>,
-    window_size_uniform: Uniform<Vec2<f32>>,
-    time_uniform: Uniform<f32>,
-    pub spheres_uniform: Uniform<Vec<Sphere>>,
+    pub camera_uniform: UniformBuffer<CameraData>,
+    window_size_uniform: UniformBuffer<Vec2<f32>>,
+    time_uniform: UniformBuffer<f32>,
+    pub spheres_uniform: UniformBuffer<Vec<Sphere>>,
 
     pub clock: std::time::Instant,
-    pub world: World,
+    pub world: Shared<World>,
+    pub spacecraft: Entity,
+
+    pub input: InputGameState,
 }
 
+use cgmath::Zero;
 use crate::ecs::Entity;
 use crate::ecs::{World, SystemManager};
-use crate::orbit::{
+use crate::physics::{
     Physics,
-    UpdatePhysicsSystem,
-    OrbitData,
 };
 use crate::projection::*;
 use crate::texture::Texture;
 use crate::triangulation::Triangulation;
 use cgmath::InnerSpace;
 use crate::math::Vec2;
-use crate::orbit::Orbit;
+use crate::orbit::{Orbit, OrbitData};
 
 fn generate_position<P: Projection<f32>>(size: usize) -> Vec<f32> {
     let (w, h) = (size as f32, size as f32);
@@ -85,9 +95,11 @@ pub fn create_position_texture<P: Projection<f32>>(
 use crate::{
     math::{Mat4, Vec3},
     vertex::Vertex,
-    render::{Sphere, Render, Id},
+    render::{Sphere, Render},
 };
+use cgmath::SquareMatrix;
 use winit::window::Window;
+use crate::input::KeyId;
 impl Game {
     pub async fn new(window: &Window) -> Self {
         let size = window.inner_size();
@@ -132,7 +144,7 @@ impl Game {
         let map_tex = Texture::from_image(&device, &queue, &img, "map.png");
 
         // Uniform buffer
-        let rot_mat_buf = device.create_buffer(&wgpu::BufferDescriptor {
+        let camera_uniform = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
             size: wgpu::BIND_BUFFER_ALIGNMENT,
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
@@ -167,12 +179,12 @@ impl Game {
                 r: 0.5
             }
         ].into();
-        let spheres_uniform = Uniform::new(&device);
+        let spheres_uniform = UniformBuffer::new(&device);
         spheres_uniform.write(&queue, &spheres);
 
-        let window_size_uniform = Uniform::new(&device);
-        let time_uniform = Uniform::new(&device);
-        let rot_mat_uniform = Uniform::new(&device);
+        let window_size_uniform = UniformBuffer::new(&device);
+        let time_uniform = UniformBuffer::new(&device);
+        let camera_uniform = UniformBuffer::new(&device);
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -216,7 +228,7 @@ impl Game {
                         count: None,
                     },
                     // rot matrix uniform
-                    rot_mat_uniform.desc_layout(4, wgpu::ShaderStage::FRAGMENT),
+                    camera_uniform.desc_layout(4, wgpu::ShaderStage::FRAGMENT),
                     // window size uniform
                     window_size_uniform.desc_layout(5, wgpu::ShaderStage::VERTEX),
                     // time uniform
@@ -247,7 +259,7 @@ impl Game {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&map_tex.sampler),
                 },
-                rot_mat_uniform.desc(4),
+                camera_uniform.desc(4),
                 window_size_uniform.desc(5),
                 time_uniform.desc(6),
                 spheres_uniform.desc(7),
@@ -322,55 +334,109 @@ impl Game {
         let num_indices = indices.len() as u32;
 
         let clock = Instant::now();
-        let id_proj = 5;
 
         // Init ECS systems
-        let mut world = World::new();
+        let mut world = Shared::new(World::new());
         let sun = Entity::new(&mut world);
         let planet = Entity::new(&mut world);
         let moon = Entity::new(&mut world);
+        let spacecraft = Entity::new(&mut world);
 
-        sun.add(&mut world,  Physics::Static {
-                mu: 100.0,
-                p: Vec3::new(3.0, 3.0, 3.0)
-            })
-            .add(&mut world, Render::Sphere(
-                Sphere {
-                    c: [0.0, 0.0, 0.0],
-                    r: 1.0
-                }
-            ));
-        planet.add(&mut world,  Physics::Orbit(Orbit::from_orbital_geometry(
-            sun,
-                10.0,
-            OrbitData::Elliptical {
-                    a: 5.0,
-                    e: 0.8,
-                    w: 0.0
-                }
-            )))
-            .add(&mut world, Render::Sphere(
-                Sphere {
-                    c: [5.0, 0.0, 0.0],
-                    r: 0.2
-                }
-            ));
-        moon.add(&mut world,  Physics::Orbit(Orbit::from_orbital_geometry(
-            planet,
-                10.0,
-                OrbitData::Elliptical {
-                    a: 1.0,
-                    e: 0.9,
-                    w: 0.0
-                }
-            )))
-            .add(&mut world, Render::Sphere(
-                Sphere {
-                    c: [5.0, 0.0, 0.0],
-                    r: 0.1
-                }
-            ));
+        {
+            // sun
+            sun
+                .add(Physics {
+                    mu: 100.0,
+                    p: Vec3::new(40.0, 0.0, 40.0),
+                    v: Vec3::zero()
+                }, &mut world)
+                .add(Render::Sphere(
+                    Sphere {
+                        c: [0.0, 0.0, 0.0],
+                        r: 1.0
+                    }
+                ), &mut world);
+        }
 
+        {
+            // planet
+            planet
+                .add(
+                    Physics::new_static(&Vec3::zero(), 20.0),
+                    &mut world
+                )
+                .add(Orbit::from_orbital_geometry(
+                        world.clone(),
+                        sun,
+                        OrbitData::Elliptical {
+                                a: 10.0,
+                                e: 0.01,
+                            },
+                        &clock.elapsed()
+                    ),
+                    &mut world,
+                )
+                .add(Render::Sphere(
+                    Sphere {
+                        c: [5.0, 0.0, 0.0],
+                        r: 0.2
+                    }
+                ), &mut world);
+        }
+
+        {
+            // moon
+            moon
+                .add(
+                    Physics::new_static(&Vec3::zero(), 10.0),
+                    &mut world
+                )
+                .add(Orbit::from_orbital_geometry(
+                        world.clone(),
+                        planet,
+                        OrbitData::Elliptical {
+                                a: 2.0,
+                                e: 0.01,
+                            },
+                        &clock.elapsed()
+                    ),
+                    &mut world,
+                )
+                .add(Render::Sphere(
+                    Sphere {
+                        c: [5.0, 0.0, 0.0],
+                        r: 0.1
+                    }
+                ), &mut world);
+        }
+        
+        {
+            // spacecraft
+            spacecraft
+                .add(
+                    Physics::new_static(&Vec3::zero(), 1e-3),
+                    &mut world
+                )
+                .add(Orbit::from_orbital_geometry(
+                        world.clone(),
+                        sun,
+                        OrbitData::Elliptical {
+                                a: 5.0,
+                                e: 0.01,
+                            },
+                        &clock.elapsed()
+                    ),
+                    &mut world,
+                )
+                .add(Camera {
+                        data: CameraData::default(),
+                        active: true
+                    },
+                    &mut world
+                );
+        }
+
+        let input = InputGameState::new();
         let mut app = Self {
             surface,
             device,
@@ -391,16 +457,26 @@ impl Game {
 
             // uniforms
             window_size_uniform,
-            rot_mat_uniform,
+            camera_uniform,
             time_uniform,
             spheres_uniform,
             clock,
 
+            // The world containing the ECS data
             world,
+            // A pointer to the spacecraft entity
+            spacecraft,
+
+            // Game input listeners
+            input,
         };
         app.resize::<Gnomonic>(size);
 
         app
+    }
+
+    pub fn register_inputs(&mut self, event: &WindowEvent) {
+        self.input.register_inputs(event);
     }
 
     pub fn resize<P: Projection<f32>>(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -411,11 +487,6 @@ impl Game {
 
         let ndc = P::compute_ndc_to_clip_factor(self.size.width as f32, self.size.height as f32);
         self.window_size_uniform.write(&self.queue, &ndc);
-    }
-
-    #[allow(unused_variables)]
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        false
     }
 
     pub fn update(&mut self, systems: &mut SystemManager) {

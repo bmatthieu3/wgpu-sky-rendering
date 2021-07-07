@@ -16,7 +16,7 @@ where
     }
 }
 
-pub struct Uniform<D>
+pub struct UniformBuffer<D>
 where
     D: UniformData
 {
@@ -24,7 +24,7 @@ where
     buf: wgpu::Buffer
 }
 
-impl<D> Uniform<D>
+impl<D> UniformBuffer<D>
 where
     D: UniformData
 {
@@ -80,17 +80,17 @@ pub trait UniformData: Sized + ToByteSlice {
 }
 
 // Implement the primitives as uniforms
-trait Primitive {}
+trait Uniform {}
 
-impl Primitive for f32 {}
-impl Primitive for i16 {}
-impl Primitive for i32 {}
-impl Primitive for u32 {}
-impl Primitive for u8 {}
+impl Uniform for f32 {}
+impl Uniform for i16 {}
+impl Uniform for i32 {}
+impl Uniform for u32 {}
+impl Uniform for u8 {}
 
 impl<T> ToByteSlice for T
 where
-    T: Primitive
+    T: Uniform
 {
     unsafe fn any_as_u8_slice(&self) -> &[u8] {
         std::slice::from_raw_parts(
@@ -102,7 +102,7 @@ where
 
 impl<T> UniformData for T
 where
-    T: Primitive
+    T: Uniform
 {
     fn min_binding_size() -> Option<NonZeroU64> {
         wgpu::BufferSize::new(
@@ -126,13 +126,17 @@ where
 
 // Math uniforms
 use crate::math::{Vec2, Vec3, Vec4, Mat3, Mat4};
-impl<T> Primitive for Mat3<T> {}
-impl<T> Primitive for Mat4<T> {}
-impl<T> Primitive for Vec2<T> {}
-impl Primitive for Sphere {}
+impl<T> Uniform for Mat3<T> {}
+impl<T> Uniform for Mat4<T> {}
+impl<T> Uniform for Vec2<T> {}
+impl<T> Uniform for Vec3<T> {}
+impl<T> Uniform for Vec4<T> {}
 
 // Rendering primitives for ray-tracing
 use crate::render::Sphere;
+impl Uniform for Sphere {}
+use crate::camera::CameraData;
+impl Uniform for CameraData {}
 
 
 

@@ -17,28 +17,45 @@ mod triangulation;
 mod uniform;
 mod render;
 pub mod ecs;
+mod camera;
+mod orbit;
+mod physics;
+mod shared;
 
 use crate::world::Game;
 use crate::projection::*;
-use crate::input::CurrentInputFrame;
 
-
-mod orbit;
 use ecs::SystemManager;
-use orbit::UpdatePhysicsSystem;
+use physics::UpdatePhysicsSystem;
+use render::RenderSystem;
+use camera::{
+    CameraUpdatePositionSystem,
+    CameraSpacecraftSystem,
+};
+
+use physics::SpacecraftCommandSystem;
+use input::KeyId;
+use winit::window::Fullscreen;
 fn main() {
     env_logger::init();
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("allsky projections")
+        //.with_fullscreen(Some(Fullscreen::Borderless(None)))
         .build(&event_loop).unwrap();
 
     use futures::executor::block_on;
     // Since main can't be async, we're going to need to block
     let mut game = block_on(Game::new(&window));
     let mut systems = SystemManager::new();
+    systems.register_system(SpacecraftCommandSystem);
     systems.register_system(UpdatePhysicsSystem);
-    let mut input = CurrentInputFrame::new(&mut game);
+
+    systems.register_system(CameraSpacecraftSystem);
+    systems.register_system(CameraUpdatePositionSystem);
+
+    systems.register_system(RenderSystem);
+
     #[cfg(target_arch = "wasm32")]
     {
         use winit::platform::web::WindowExtWebSys;
@@ -59,18 +76,22 @@ fn main() {
                 ref event,
                 window_id,
             } if window_id == window.id() => {
-                input.register_frame_events(&mut game, event, control_flow);
-                if !game.input(event) {
-                    match event {
-                        WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                        WindowEvent::Resized(physical_size) => {
-                            game.resize::<Gnomonic>(*physical_size);
-                        },
-                        WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                            game.resize::<Gnomonic>(**new_inner_size);
-                        }
-                        _ => {}
+                game.register_inputs(event);
+                // Check for the escape key pressed
+                let inputs = &game.input;
+                if inputs.is_key_pressed(&KeyId::Escape) {
+                    *control_flow = ControlFlow::Exit;
+                }
+                // Check for other type event i.e. CloseRequested, Resized...
+                match event {
+                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                    WindowEvent::Resized(physical_size) => {
+                        game.resize::<Gnomonic>(*physical_size);
+                    },
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        game.resize::<Gnomonic>(**new_inner_size);
                     }
+                    _ => {}
                 }
             }
             Event::RedrawRequested(_) => {

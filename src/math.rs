@@ -16,6 +16,36 @@ pub type Vec3<T> = cgmath::Vector3<T>;
 #[allow(dead_code)]
 pub type Vec4<T> = cgmath::Vector4<T>;
 
+pub trait Rotation<T>
+where
+    T: Float
+{
+    fn rotate(&self, angle: T, axis: Self) -> Self;
+    // Return the angle in radians between
+    // self and another vector
+    fn angle(&self, other: &Self) -> T;
+}
+
+impl<T> Rotation<T> for Vec3<T>
+where
+    T: Float
+{
+    fn rotate(&self, theta: T, axis: Self) -> Self {
+        let ct = theta.cos();
+        let st = theta.sin();
+        let v_rot = self * ct + (axis.cross(*self)) * st + axis * (axis.dot(*self))*(T::one() - ct);
+        return v_rot;
+    }
+
+    // Return the angle in radians between
+    // self and another vector
+    fn angle(&self, other: &Self) -> T {
+        self.cross(*other)
+            .magnitude()
+            .atan2(self.dot(*other))
+    }
+}
+
 #[allow(dead_code)]
 pub type Mat4<T> = cgmath::Matrix4<T>;
 #[allow(dead_code)]
@@ -155,5 +185,19 @@ mod tests {
         assert!(kep_eq(r.into()).value() < err);
 
         dbg!(r);
+    }
+    use crate::math::Rotation;
+    use super::Vec3;
+    #[test]
+    fn rotate_vector() {
+        let v = Vec3::new(1.0, 0.0, 0.0);
+        let axis = Vec3::new(0.0, 1.0, 0.0);
+
+        let r_v = v.rotate(std::f32::consts::PI, axis);
+        let r = Vec3::new(-1.0, 0.0, 0.0);
+
+        assert!(((r_v.x) - (r.x)).abs() < 1e-3);
+        assert!(((r_v.y) - (r.y)).abs() < 1e-3);
+        assert!(((r_v.z) - (r.z)).abs() < 1e-3);
     }
 }

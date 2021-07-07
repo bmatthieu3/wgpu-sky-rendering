@@ -12,8 +12,9 @@ layout(set = 0, binding = 2) uniform texture2D t_map;
 layout(set = 0, binding = 3) uniform sampler s_map;
 
 layout(set = 0, binding = 4)
-uniform RotationMatrix {
+uniform Camera {
     mat4 rot;
+    vec3 origin;
 };
 
 struct Sphere {
@@ -222,9 +223,8 @@ vec4 get_color(vec3 pos) {
     // Planet color definition
     vec4 planet_color = vec4(1.0);
 
-    vec3 pos_cam_ws = vec3(0.0, 0.0, 0.0);
     for(int i = 0; i < MAX_NUM_OBJECTS; i++) {
-        if(intersect_sphere(pos_cam_ws, pos, s[i])) {
+        if(intersect_sphere(origin, pos, s[i])) {
             return planet_color;
         }
     }

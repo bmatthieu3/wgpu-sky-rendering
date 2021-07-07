@@ -31,6 +31,17 @@ fn impl_component_macro(ast: &syn::DeriveInput) -> TokenStream {
                 Box::new(it)
             }
 
+            fn query_with_entity(world: &'a ecs::World) -> Box<dyn Iterator<Item=(ecs::Entity, Self::RefType)> + 'a> {
+                let it = world
+                    .get::<#name>()
+                    .enumerate()
+                    .filter_map(|(entity, a)| {
+                        Some( (ecs::Entity(entity), a.as_ref()?) )
+                    });
+        
+                Box::new(it)
+            }
+
             fn query_mut(world: &'a mut ecs::World) -> Box<dyn Iterator<Item=Self::RefMutType> + 'a> {
                 let it = if let Some(idx) = world.get_index::<#name>() {
                     let mut c = &mut world.components[..];
