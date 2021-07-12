@@ -49,65 +49,159 @@ where
 use crate::{ecs::Entity, physics::Physics};
 use crate::shared::Shared;
 use crate::ecs::World;
+use cgmath::Rad;
 #[derive(Debug)]
 #[derive(Component)]
 pub struct Orbit {
     world: Shared<World>,
+    // The entity to which the object is orbiting
+    primary_body: Entity,
+    // longitude of the ascending node
+    big_omega: Rad<f32>,
+    // argument of the periapsis
+    omega: Rad<f32>,
+    // inclinaison
+    i: Rad<f32>,
+    // semi major axis
+    a: f32,
+    // time of periapsis passage
+    tau: f32,
+    // eccentricity
+    e: f32,
 
-    pub prim_body: Entity,
-    // orbit data
-    data: OrbitData<f64>,
-    // time of creation of the orbit
-    t0: std::time::Duration,
-    // true anomaly (angular distance of the body past the point of periapsis) in radians
-    nu: f64,
-    // distance to its primary body
-    r: f64,
-    // zenith angle (angle between position and the velocity vector)
-    gamma: f64,
+    // Motion period
+    T: f32,
+    // n
+    n: f32,
+    // normal to the elliptical plane
+    h: Vec3<f32>
+}
 
-    // radius of the influence sphere
-    //rp: f64,
+use crate::world::Game;
+use ecs::System;
+pub struct UpdateInOrbitObjectsSystem;
+impl System for UpdateInOrbitObjectsSystem {
+    fn run(&self, game: &mut Game, t: &std::time::Instant) {
+        for (physics, orbit) in game.world.clone().query_mut::<(Physics, Orbit)>() {
+            // See 4.67 to 4.70 equation to calculate the true anomaly (noted theta)
+            // as a function of the time elapsed
+            // https://farside.ph.utexas.edu/teaching/celestial/Celestial/node33.html
+            let M = orbit.n * (t.elapsed().as_secs_f32() - orbit.tau);
 
-    // Eccentric anomaly E0
-    e0: f64,
+            // Newton's method to compute E from the kepler equation
+            let kep_eq = |x: F1| { x - orbit.e*x.sin() - M };
+            let E = resolve_numerically(M as f64, &kep_eq, 1e-4) as f32;
+            let r = orbit.a * (1.0 - orbit.e * E.cos());
+
+            // True anomaly
+            let theta = Rad(
+                2.0 * (((1.0 + orbit.e)/(1.0 - orbit.e)).sqrt() * (E * 0.5).tan()).atan()
+            );
+
+            // Flight path angle
+            let flight_path_angle = (orbit.e*theta.sin()/(1.0 + orbit.e*theta.cos())).atan();
+            let gamma = std::f32::consts::PI/2.0 - flight_path_angle;
+
+            // Velocity
+            let prim_body_physic = orbit.primary_body.get::<Physics>(&game.world).unwrap();
+            let v = (prim_body_physic.mu*((2.0/r) - 1.0/orbit.a)).sqrt();
+
+            // Conversion to cartesian coordinate system
+            physics.p = PolarCoo { orbit: &orbit, r, theta }.into();
+
+            let er = (physics.p - prim_body_physic.p).normalize();
+            // TODO: test the direction of the velocity vector
+            physics.v = er.rotate(gamma, orbit.h) * v;
+            physics.has_moved = true;
+        }
+    }
+}
+
+struct PolarCoo<'a> {
+    // Orbit reference
+    orbit: &'a Orbit,
+    // Radius
+    r: f32,
+    // Theta
+    theta: Rad<f32>
+}
+
+type CartesianCoo = Vec3<f32>;
+use cgmath::Angle;
+impl<'a> From<PolarCoo<'a>> for CartesianCoo {
+    fn from(c: PolarCoo<'a>) -> CartesianCoo {
+        // 4.72 -> 4.74 https://farside.ph.utexas.edu/teaching/celestial/Celestial/node34.html
+        let b_omega_c = c.orbit.big_omega.cos();
+        let b_omega_s = c.orbit.big_omega.sin();
+
+        let omega_theta_c = (c.theta + c.orbit.omega).cos();
+        let omega_theta_s = (c.theta + c.orbit.omega).sin();
+
+        let I_c = c.orbit.i.cos();
+        let I_s = c.orbit.i.sin();
+
+        let world = &c.orbit.world;
+        let origin = &c.orbit.primary_body.get::<Physics>(world)
+            .unwrap()
+            .p;
+
+        origin + Vec3::new(
+            c.r * (b_omega_s * omega_theta_c + b_omega_c * omega_theta_s * I_c),
+            c.r * omega_theta_s * I_s,
+            c.r * (b_omega_c * omega_theta_c - b_omega_s * omega_theta_s * I_c)
+        )
+    }
 }
 
 use cgmath::InnerSpace;
 use crate::math::Rotation;
 impl Orbit {
-    // Define a orbit from:
-    // - the mass (or product G*M of the star: mu)
-    // - the orbit data
-    pub fn from_orbital_geometry(
-        // World
-        world: Shared<ecs::World>,
-        // Reference body entity
-        prim_body: Entity,
-        // Trajectory of the orbiting body around the reference body
-        data: OrbitData<f64>,
-        time: &std::time::Duration
+    pub fn new(
+        world: Shared<World>,
+        // The entity to which the object is orbiting
+        primary_body: Entity,
+        // longitude of the ascending node
+        big_omega: Rad<f32>,
+        // argument of the periapsis
+        omega: Rad<f32>,
+        // inclinaison
+        i: Rad<f32>,
+        // semi major axis
+        a: f32,
+        // time of periapsis passage
+        tau: f32,
+        // eccentricity
+        e: f32,
     ) -> Self {
-        let mut orbit = Self {
+        let MG = primary_body.get::<Physics>(&world).unwrap().mu;
+        // Period of motion
+        let T = 2.0 * std::f32::consts::PI * (a*a*a/MG).sqrt();
+        // n
+        let n = 2.0 * std::f32::consts::PI / T;
+
+        // normal to the elliptical plane
+        let h = Vec3::new(
+            -i.sin()*big_omega.cos(),
+            i.cos(),
+            i.sin()*big_omega.sin()
+        );
+
+        Orbit { 
             world,
-            prim_body,
-            nu: 0.0,
-            r: 0.0,
-            gamma: 0.0,
-            data,
-            //rp: 0.0,
-            e0: 0.0,
-            t0: *time,
-        };
-
-        // Set the object at the periapsis of its orbit
-        // periapsis <=> nu = 0.0
-
-        orbit.set_true_anomaly(0.0);
-
-        orbit
+            primary_body,
+            big_omega,
+            omega,
+            i,
+            a,
+            tau,
+            e,
+            T,
+            n,
+            h
+        }
     }
-
+}
+/*
     // Define an orbit from:
     // - a primary body characteristics
     // - the position of the satellite
@@ -367,6 +461,7 @@ impl Orbit {
         let er = pos_primary_space.normalize();
         //physics.v = er.rotate(self.gamma, Vec3::unit_y())*v;
         physics.v = er * v;
+        physics.has_moved = true;
     }
 
     pub fn set_true_anomaly(&mut self, nu: f64) {
@@ -463,20 +558,74 @@ impl Orbit {
         let er = p.normalize();
         self.d = er.rotate(self.gamma, Vec3::unit_y());
     }*/
+
+    // Given a true anomaly, return the position of the vertex
+    fn get_position(&self, nu: f64) -> Vec3<f64> {
+        let (MG, origin) = {
+            let p = self.prim_body.get::<Physics>(&self.world).unwrap();
+            (p.mu, &p.p)
+        };
+
+        let nu_c = nu.cos();
+        let nu_s = nu.sin();
+
+        let (pos_primary_space, v) = match self.data {
+            OrbitData::Elliptical { a, e} => {
+                let E_c = (e + nu_c)/(1.0 + e*nu_c);
+                let z = a*E_c;
+                let x = self.r*nu_s;
+                let y = 0.0; // In the equator plane
+
+                let v = (MG*((2.0/self.r) - 1.0/a)).sqrt();
+
+                (Vec3::new(x, y, z), v)
+            },
+            OrbitData::Circular { r } => {
+                let z = r * nu_c;
+                let x = r * nu_s;
+                let y = 0.0;
+
+                let v = (MG/self.r).sqrt();
+
+                (Vec3::new(x, y, z), v)
+            },
+            OrbitData::Hyperbolic { a, e, ..} => {
+                let z = self.r * nu_c;
+                let x = self.r * nu_s;
+                let y = 0.0;
+
+                let v = (MG*((2.0/self.r) - 1.0/a)).sqrt();
+
+                (Vec3::new(x, y, z), v)
+            }
+        };
+    }
 }
 
-use ecs::System;
+*/
+/*use ecs::System;
 use crate::world::Game;
-/*pub struct UpdateOrbitPosition;
-impl System for UpdateOrbitPosition {
+use crate::camera::Camera;
+pub struct OrbitPlotting;
+impl System for OrbitPlotting {
     fn run(&self, game: &mut Game, t: &std::time::Duration) {
-        let world = &mut game.world;
+        // Loop over the camera to get the current active one
+        for (camera, physics) in game.world.query::<(Camera, Physics)>() {
+            if camera.active && physics.has_moved {
+                // If the active camera has moved
+                println!("camera has moved");
 
-        for orbit in world.query_mut::<Orbit>() {
-            orbit.update(t);
+                /*for (physics, orbit) in game.world.query::<(Physics, Orbit)>() {
+                    // project the orbit to the screen
+                    let step = 0.1;
+                    let mut nu = 0.0;
+                    while nu < 2.0*std::f32::consts::PI {
+                        orbit.get_position(nu);
 
-            //e.set::<Orbit>(world, orbit);
+                        thetnua += step;                        
+                    }
+                }*/
+            }
         }
-        println!("run physic system");
     } 
 }*/

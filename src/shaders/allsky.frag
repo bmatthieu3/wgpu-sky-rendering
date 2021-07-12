@@ -221,13 +221,13 @@ vec4 get_color(vec3 pos) {
     vec4 sky_color = texture(sampler2D(t_map, s_map), tq);
 
     // Planet color definition
-    vec4 planet_color = vec4(1.0);
+    /*vec4 planet_color = vec4(1.0);
 
     for(int i = 0; i < MAX_NUM_OBJECTS; i++) {
         if(intersect_sphere(origin, pos, s[i])) {
             return planet_color;
         }
-    }
+    }*/
 
     return sky_color;
 }

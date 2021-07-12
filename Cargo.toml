@@ -27,6 +27,7 @@ byte-slice-cast = "1.0.0"
 itertools = "0.10.1"
 # autodiff defines traits that does auto differencing on closures
 autodiff = "0.3.2"
+gltf = "0.16.0"
 
 
 [dependencies.wgpu]

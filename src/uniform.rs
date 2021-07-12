@@ -28,10 +28,10 @@ impl<D> UniformBuffer<D>
 where
     D: UniformData
 {
-    pub fn new(device: &wgpu::Device) -> Self {
+    pub fn new(device: &wgpu::Device, size: u64) -> Self {
         let buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: None,
-            size: wgpu::BIND_BUFFER_ALIGNMENT,
+            size: size,
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
             mapped_at_creation: false,
         });
@@ -42,21 +42,21 @@ where
         }
     }
 
-    pub fn write(&self, q: &wgpu::Queue, data: &D) {
+    pub fn write(&self, q: &wgpu::Queue, offset: wgpu::BufferAddress, data: &D) {
         q.write_buffer(
             &self.buf,
-            0,
+            offset,
             unsafe { data.any_as_u8_slice() }
         );
     }
 
-    pub fn desc_layout(&self, binding: u32, visibility: wgpu::ShaderStage) -> wgpu::BindGroupLayoutEntry {
+    pub fn desc_layout(&self, binding: u32, visibility: wgpu::ShaderStage, has_dynamic_offset: bool) -> wgpu::BindGroupLayoutEntry {
         wgpu::BindGroupLayoutEntry {
             binding,
             visibility,
             ty: wgpu::BindingType::Buffer {
                 ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
+                has_dynamic_offset: has_dynamic_offset,
                 min_binding_size: D::min_binding_size(),
             },
             count: None,
@@ -98,6 +98,13 @@ where
             std::mem::size_of::<Self>(),
         )
     }
+}
+
+pub unsafe fn any_as_u8_slice<'a, S, T: AsRef<[S]>>(v: T) -> &'a [u8] {
+    std::slice::from_raw_parts(
+        (v.as_ref().as_ptr() as *const S) as *const u8,
+        std::mem::size_of::<S>() * v.as_ref().len(),
+    )
 }
 
 impl<T> UniformData for T

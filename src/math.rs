@@ -150,6 +150,14 @@ pub fn rotation_from_direction<T: Float>(direction: &Vec3<T>, up: &Vec3<T>) -> M
     )
 }
 
+pub fn extract_direction<T: Float>(mat: &Mat4<T>) -> Vec3<T> {
+    Vec3::new(
+        mat.x.z,
+        mat.y.z,
+        mat.z.z
+    )
+}
+
 // Newton's method for resolving f(x) = 0 expressions
 pub fn resolve_numerically(x0: f64, f: &impl Fn(F1) -> F1, e: f64) -> f64 {
     let mut x = x0.into();

@@ -15,19 +15,23 @@ use cgmath::Zero;
 #[derive(Component)]
 pub struct Physics {
     // position vector
-    pub p: Vec3<f64>,
+    pub p: Vec3<f32>,
     // velocity vector
-    pub v: Vec3<f64>,
+    pub v: Vec3<f32>,
     // mu = m * G product of the body
-    pub mu: f64,
+    pub mu: f32,
+    // a flag to tell if the physics has been updated
+    // during the current frame
+    pub has_moved: bool,
 }
 
 impl Physics {
-    pub fn new_static(p: &Vec3<f64>, mu: f64) -> Self {
+    pub fn new_static(p: &Vec3<f32>, mu: f32) -> Self {
         Self {
             p: *p,
             v: Vec3::zero(),
             mu,
+            has_moved: false,
         }
     }
 }
@@ -38,6 +42,7 @@ impl Default for Physics {
             p: Vec3::zero(),
             v: Vec3::zero(),
             mu: 1.0,
+            has_moved: false,
         }
     }
 }
@@ -48,20 +53,25 @@ use crate::{input::KeyId, orbit::OrbitData, render::Render, world::Game};
 use crate::orbit::Orbit;
 pub struct UpdatePhysicsSystem;
 impl System for UpdatePhysicsSystem {
-    fn run(&self, game: &mut Game, t: &std::time::Duration) {
+    fn run(&self, game: &mut Game, t: &std::time::Instant) {
         println!("run physic system");
         let world = &mut game.world;
 
-        // Update entities being in orbit
+        // 1. Reset the physics has_moved flag
+        for physics in world.query_mut::<Physics>() {
+            physics.has_moved = false;
+        }
+
+        /*// 2. Update entities being in orbit
         for (physics, orbit) in world.query_mut::<(Physics, Orbit)>() {
             orbit.update(t, physics);
-        }
+        }*/
     } 
 }
 
 pub struct SpacecraftCommandSystem;
 impl System for SpacecraftCommandSystem {
-    fn run(&self, game: &mut Game, t: &std::time::Duration) {
+    fn run(&self, game: &mut Game, t: &std::time::Instant) {
         let world = game.world.clone();
         let spacecraft = &mut game.spacecraft;
         if game.input.is_key_pressed(&KeyId::Up) {
@@ -69,7 +79,7 @@ impl System for SpacecraftCommandSystem {
 
             if let (Some(p), Some(o)) = (spacecraft.get_mut::<Physics>(&mut world.clone()), spacecraft.get_mut::<Orbit>(&mut world.clone())) {
                 p.v *= 1.01;
-                o.set_velocity(&p.v);
+                //o.set_velocity(&p.v);
             }
         }
     }

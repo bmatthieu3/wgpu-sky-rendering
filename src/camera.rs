@@ -1,5 +1,5 @@
 use core_engine::Component;
-use crate::{ecs, math::{Mat4, Vec2, Vec3}, physics::Physics, projection::{Gnomonic, Projection}, world::Game};
+use crate::{ecs, math::{Mat4, Vec2, Vec3, extract_direction}, physics::Physics, projection::{Gnomonic, Ortho, Projection}, world::Game};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -17,7 +17,7 @@ pub struct Camera {
     // The data that are send to the GPU
     pub data: CameraData,
     // Active boolean
-    pub active: bool
+    pub active: bool,
 }
 
 impl Camera {
@@ -26,7 +26,7 @@ impl Camera {
     }
 }
 
-use cgmath::SquareMatrix;
+use cgmath::{Point3, SquareMatrix};
 impl Default for CameraData {
     fn default() -> Self {
         Self {
@@ -41,34 +41,40 @@ impl Default for CameraData {
 //
 // It will also upload to the queue the active matrix
 pub struct CameraUpdatePositionSystem;
+use cgmath::Zero;
 
 use cgmath::InnerSpace;
 use ecs::System;
 use crate::math::Rotation;
 use crate::math::rotation_from_direction;
 impl System for CameraUpdatePositionSystem {
-    fn run(&self, game: &mut Game, _: &std::time::Duration) {
-        let world = &mut game.world;
+    fn run(&self, game: &mut Game, _: &std::time::Instant) {
+        for (physic, camera) in game.world.clone().query_mut::<(Physics, Camera)>() {
+            // If the physics attached to the camera has moved, change the camera origin
+            if physic.has_moved {
+                let pos = &physic.p;
+                camera.data.origin = Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
+            }
 
-        for (physic, camera) in world.query_mut::<(Physics, Camera)>() {
-            let pos = &physic.p;
-            camera.data.origin = Vec3::new(pos.x as f32, pos.y as f32, pos.z as f32);
-            /*camera.data.dir_mat = rotation_from_direction(
-                &camera.data.dir,
-                &Vec3::new(0.0, 1.0, 0.0)
-            );*/
-
+            // Send the current active camera to the bound shader
             if camera.active {
-                game.camera_uniform.write(&game.queue, &camera.data);
+                game.skybox_camera_uniform.write(&game.queue, 0, &camera.data);
+
+                let po = Point3::new(
+                    camera.data.origin.x,
+                    camera.data.origin.y,
+                    camera.data.origin.z
+                );
+                //let dir = game.spacecraft.get::<Physics>(&game.world.clone()).unwrap().v.normalize();
+                let pd = po + camera.data.dir;
+                game.camera_uniform.write(&game.queue, 0, &(crate::render::OPENGL_TO_WGPU_MATRIX * Mat4::look_at(po, Point3::new(0.0, 0.0, 0.0), Vec3::unit_y())));
             }
         }
     }
 }
-
 pub struct CameraSpacecraftSystem;
-
 impl System for CameraSpacecraftSystem {
-    fn run(&self, game: &mut Game, _: &std::time::Duration) {
+    fn run(&self, game: &mut Game, _: &std::time::Instant) {
         let spacecraft = &mut game.spacecraft;
         let dir = &spacecraft.get::<Physics>(&game.world).unwrap().v;
 
@@ -112,7 +118,7 @@ impl System for CameraSpacecraftSystem {
                 off_theta
             };
 
-            let dir = Vec3::unit_z().rotate(off_theta, Vec3::unit_y());
+            let dir = Vec3::unit_z().rotate(0.1*off_theta, Vec3::unit_y());
             rot_along_x = rotation_from_direction(&dir, &Vec3::new(0.0, 1.0, 0.0));
         }
 
@@ -136,12 +142,12 @@ impl System for CameraSpacecraftSystem {
                 -off_theta
             };
 
-            let dir = Vec3::unit_z().rotate(off_theta, Vec3::unit_x());
+            let dir = Vec3::unit_z().rotate(0.1*off_theta, Vec3::unit_x());
             rot_along_y = rotation_from_direction(&dir, &Vec3::new(0.0, 1.0, 0.0));
         }
 
-        camera.data.dir_mat = rot_along_x * rot_along_y;
-        //camera.data.dir_mat = rotation_from_direction(&spacecraft_dir, &Vec3::new(0.0, 1.0, 0.0));
-        // TODO: compute camera dir vector from the dir matrix
+        //camera.data.dir = Vec3::unit_z();
+        camera.data.dir_mat = rotation_from_direction(&spacecraft_dir, &Vec3::new(0.0, 1.0, 0.0)) * rot_along_x * rot_along_y;
+        camera.data.dir = extract_direction(&camera.data.dir_mat).normalize();
     }
 }

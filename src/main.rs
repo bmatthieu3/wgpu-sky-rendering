@@ -21,17 +21,21 @@ mod camera;
 mod orbit;
 mod physics;
 mod shared;
+mod pipelines;
+mod resources;
 
 use crate::world::Game;
 use crate::projection::*;
 
 use ecs::SystemManager;
 use physics::UpdatePhysicsSystem;
-use render::RenderSystem;
+use render::RenderingSystem;
 use camera::{
     CameraUpdatePositionSystem,
     CameraSpacecraftSystem,
 };
+
+use orbit::UpdateInOrbitObjectsSystem;
 
 use physics::SpacecraftCommandSystem;
 use input::KeyId;
@@ -41,6 +45,7 @@ fn main() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("allsky projections")
+        .with_inner_size(winit::dpi::Size::Physical(winit::dpi::PhysicalSize::<u32>::new(1024, 768)))
         //.with_fullscreen(Some(Fullscreen::Borderless(None)))
         .build(&event_loop).unwrap();
 
@@ -49,12 +54,14 @@ fn main() {
     let mut game = block_on(Game::new(&window));
     let mut systems = SystemManager::new();
     systems.register_system(SpacecraftCommandSystem);
+
     systems.register_system(UpdatePhysicsSystem);
+    systems.register_system(UpdateInOrbitObjectsSystem);
 
     systems.register_system(CameraSpacecraftSystem);
     systems.register_system(CameraUpdatePositionSystem);
 
-    systems.register_system(RenderSystem);
+    systems.register_system(RenderingSystem);
 
     #[cfg(target_arch = "wasm32")]
     {

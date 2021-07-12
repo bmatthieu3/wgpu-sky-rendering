@@ -517,9 +517,9 @@ fn recursive_triangulation<T: Float, P: Projection<T>>(
     }
 }
 use crate::projection::Projection;
-use crate::vertex::Vertex;
+use crate::vertex::{ClipSpaceVertex, Vertex};
 impl Triangulation {
-    pub fn create<P: Projection<f32>>() -> (Vec<Vertex>, Vec<u16>) {
+    pub fn create<P: Projection<f32>>() -> (Vec<ClipSpaceVertex>, Vec<u16>) {
         let (mut vertices, mut idx) = (Vec::new(), Vec::new());
 
         let root = Face::new(Vector2::new(-1.0, -1.0), Vector2::new(1.0, 1.0));
@@ -532,9 +532,9 @@ impl Triangulation {
         recursive_triangulation::<f32, P>(&children[2], &mut vertices, &mut idx, depth, &mut first);
         recursive_triangulation::<f32, P>(&children[3], &mut vertices, &mut idx, depth, &mut first);
 
-        let vertices: Vec<Vertex> = vertices
+        let vertices: Vec<ClipSpaceVertex> = vertices
             .into_iter()
-            .map(|v| Vertex {
+            .map(|v| ClipSpaceVertex {
                 position: [v.x, v.y],
             })
             .collect();
