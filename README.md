@@ -28,13 +28,6 @@ Play with the left and right keys to change the current projection.
 ### From Source
 
 ```sh
-# Clone the repo
-$ git clone https://github.com/bmatthieu3/wgpu-sky-rendering.git
-$ cd wgpu-sky-rendering
-
-# Compile
-$ cargo build --release
-
 # Run
 $ cargo run --release
 ```

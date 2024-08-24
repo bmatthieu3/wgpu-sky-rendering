@@ -7,161 +7,46 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 image = "0.23.14"
-winit = { version = "0.25.0", features = ["web_sys"]}
-env_logger = "0.8.2"
+winit = { version = "0.29", features = ["rwh_05"]}
+env_logger = "0.10"
 log = "0.4"
 futures = "0.3"
 bytemuck = { version = "1.4", features = [ "derive" ] }
-anyhow = "1.0"
 cgmath = "0.18.0"
 num-traits = "0.2.14"
 byte-slice-cast = "1.0.0"
+wgpu = { version = "22.0", features = [ "glsl" ] }
+naga = "22.1.0"
+pollster = "0.3"
 
-[dependencies.wgpu]
-version = "0.8.1"
-# features = ["vulkan-portability"]
+[lib]
+crate-type = ["cdylib", "rlib"]
 
-[build-dependencies]
-anyhow = "1.0"
-fs_extra = "1.2.0"
-glob = "0.3"
-shaderc = "0.7"
+#[build-dependencies]
+#anyhow = "1.0"
+#fs_extra = "1.2.0"
+#glob = "0.3"
+#shaderc = "0.8"
 
 # used to generate SPIR-V for the Web target
-[target.'cfg(target_arch = "wasm32")'.dependencies.naga]
-git = "https://github.com/gfx-rs/naga"
-tag = "gfx-25"
-features = ["wgsl-in", "spv-out"]
+#[target.'cfg(target_arch = "wasm32")'.dependencies.naga]
+#git = "https://github.com/gfx-rs/naga"
+#tag = "gfx-25"
+#features = ["wgsl-in", "spv-out"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2.73" # remember to change version in wiki as well
-web-sys = { version = "=0.3.50", features = [
+console_error_panic_hook = "0.1.6"
+console_log = "1.0"
+wgpu = { version = "22.0", features = ["webgl", "glsl"]}
+web-sys = { version = "0.3", features = [
     "Document",
-    "Navigator",
-    "Node",
-    "NodeList",
-    "Gpu",
-    "GpuAdapter",
-    "GpuAdapterFeatures",
-    "GpuAdapterLimits",
-    "GpuAddressMode",
-    "GpuBindGroup",
-    "GpuBindGroupDescriptor",
-    "GpuBindGroupEntry",
-    "GpuBindGroupLayout",
-    "GpuBindGroupLayoutDescriptor",
-    "GpuBindGroupLayoutEntry",
-    "GpuBlendComponent",
-    "GpuBlendFactor",
-    "GpuBlendOperation",
-    "GpuBlendState",
-    "GpuBuffer",
-    "GpuBufferBinding",
-    "GpuBufferBindingLayout",
-    "GpuBufferBindingType",
-    "GpuBufferDescriptor",
-    "GpuBufferUsage",
-    "GpuCanvasContext",
-    "GpuColorDict",
-    "GpuColorTargetState",
-    "GpuColorWrite",
-    "GpuCommandBuffer",
-    "GpuCommandBufferDescriptor",
-    "GpuCommandEncoder",
-    "GpuCommandEncoderDescriptor",
-    "GpuCompareFunction",
-    "GpuCompilationInfo",
-    "GpuCompilationMessage",
-    "GpuCompilationMessageType",
-    "GpuComputePassDescriptor",
-    "GpuComputePassEncoder",
-    "GpuComputePipeline",
-    "GpuComputePipelineDescriptor",
-    "GpuCullMode",
-    "GpuDepthStencilState",
-    "GpuDevice",
-    "GpuDeviceDescriptor",
-    "GpuDeviceLostInfo",
-    "GpuDeviceLostReason",
-    "GpuErrorFilter",
-    "GpuExtent3dDict",
-    "GpuFeatureName",
-    "GpuFilterMode",
-    "GpuFragmentState",
-    "GpuFrontFace",
-    "GpuImageCopyBuffer",
-    "GpuImageCopyImageBitmap",
-    "GpuImageCopyTexture",
-    "GpuImageDataLayout",
-    "GpuIndexFormat",
-    "GpuInputStepMode",
-    "GpuLoadOp",
-    "GpuMapMode",
-    "GpuMultisampleState",
-    "GpuObjectDescriptorBase",
-    "GpuOrigin2dDict",
-    "GpuOrigin3dDict",
-    "GpuOutOfMemoryError",
-    "GpuPipelineDescriptorBase",
-    "GpuPipelineLayout",
-    "GpuPipelineLayoutDescriptor",
-    "GpuPipelineStatisticName",
-    "GpuPowerPreference",
-    "GpuPrimitiveState",
-    "GpuPrimitiveTopology",
-    "GpuProgrammableStage",
-    "GpuQuerySet",
-    "GpuQuerySetDescriptor",
-    "GpuQueryType",
-    "GpuQueue",
-    "GpuRenderBundle",
-    "GpuRenderBundleDescriptor",
-    "GpuRenderBundleEncoder",
-    "GpuRenderBundleEncoderDescriptor",
-    "GpuRenderPassColorAttachment",
-    "GpuRenderPassDepthStencilAttachment",
-    "GpuRenderPassDescriptor",
-    "GpuRenderPassEncoder",
-    "GpuRenderPipeline",
-    "GpuRenderPipelineDescriptor",
-    "GpuRequestAdapterOptions",
-    "GpuSampler",
-    "GpuSamplerBindingLayout",
-    "GpuSamplerBindingType",
-    "GpuSamplerDescriptor",
-    "GpuShaderModule",
-    "GpuShaderModuleDescriptor",
-    "GpuShaderStage",
-    "GpuStencilFaceState",
-    "GpuStencilOperation",
-    "GpuStorageTextureAccess",
-    "GpuStorageTextureBindingLayout",
-    "GpuStoreOp",
-    "GpuSwapChain",
-    "GpuSwapChainDescriptor",
-    "GpuTexture",
-    "GpuTextureAspect",
-    "GpuTextureBindingLayout",
-    "GpuTextureDescriptor",
-    "GpuTextureDimension",
-    "GpuTextureFormat",
-    "GpuTextureSampleType",
-    "GpuTextureUsage",
-    "GpuTextureView",
-    "GpuTextureViewDescriptor",
-    "GpuTextureViewDimension",
-    "GpuUncapturedErrorEvent",
-    "GpuUncapturedErrorEventInit",
-    "GpuValidationError",
-    "GpuVertexAttribute",
-    "GpuVertexBufferLayout",
-    "GpuVertexFormat",
-    "GpuVertexState",
-    "HtmlCanvasElement",
     "Window",
+    "Element",
 ]}
 js-sys = "0.3.50"
-wasm-bindgen-futures = "0.4.23"
+wasm-bindgen-futures = "0.4.30"
+getrandom = { version = "0.2", features = ["js"] }
 
 [profile.release]
 opt-level = 3

@@ -193,10 +193,11 @@ vec4 get_color(vec3 pos) {
 
 void main() {
     // Retrieve the position from the texture
-    vec3 pos_ws = texture(sampler2D(t_world_pos, s_world_pos), pos_cs).rgb;
+    vec3 pos_ws = normalize((texture(sampler2D(t_world_pos, s_world_pos), pos_cs).xyz - 0.5) * 2.0);
     // Rotate it
     vec3 rotated_p = vec3(rot * vec4(pos_ws, 1.0));
 
     f_color = get_color(rotated_p);
+    //f_color = vec4(rotated_p, 1.0);
 }
  

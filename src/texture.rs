@@ -23,8 +23,8 @@ impl Texture {
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
         rgba: &[u8],
-        bytes_per_row: u32,
         dimensions: (u32, u32),
+        num_bytes_per_pixel: usize,
         label: &str,
     ) -> Self {
         let size = wgpu::Extent3d {
@@ -34,12 +34,17 @@ impl Texture {
         };
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some(label),
+            // All textures are stored as 3D, we represent our 2D texture
+            // by setting depth to 1.
             size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            // TEXTURE_BINDING tells wgpu that we want to use this texture in shaders
+            // COPY_DST means that we want to copy data to this texture
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
         });
 
         queue.write_texture(
@@ -47,12 +52,13 @@ impl Texture {
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
             rgba,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(std::num::NonZeroU32::new(bytes_per_row).unwrap()),
-                rows_per_image: None,
+                bytes_per_row: Some((num_bytes_per_pixel as u32) * dimensions.0),
+                rows_per_image: Some(dimensions.1),
             },
             size,
         );
@@ -80,18 +86,17 @@ impl Texture {
         queue: &wgpu::Queue,
         data: &[T],
         dimensions: (usize, usize),
+        num_bytes_per_pixel: usize,
         label: &str,
     ) -> Self {
         let data = T::to_byte_slice(data);
-        let bytes_per_row = (dimensions.0 as u32) * 4 * (std::mem::size_of::<T>() as u32);
-
         Self::from_bytes_rgba(
             device,
             queue,
             T::WGPU_FORMAT,
             data,
-            bytes_per_row,
             (dimensions.0 as u32, dimensions.1 as u32),
+            num_bytes_per_pixel,
             label,
         )
     }
@@ -105,14 +110,14 @@ impl Texture {
     ) -> Self {
         let rgba = img.as_rgba8().unwrap();
         let dimensions = img.dimensions();
-        let bytes_per_row = (dimensions.0 as u32) * 4 * (std::mem::size_of::<u8>() as u32);
+
         Self::from_bytes_rgba(
             device,
             queue,
             wgpu::TextureFormat::Rgba8UnormSrgb,
             rgba,
-            bytes_per_row,
             dimensions,
+            4,
             label,
         )
     }

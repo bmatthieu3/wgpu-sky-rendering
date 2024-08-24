@@ -1,0 +1,21 @@
+{
+  "name": "allsky_proj",
+  "version": "1.0.0",
+  "description": "A simple sky rendering example featuring wgpu basic setup",
+  "main": "pkg/allsky_proj.js",
+  "scripts": {
+    "wasm": "wasm-pack build --target web --release",
+    "build": "npm run wasm && vite build",
+    "dev": "npm run build && vite",
+    "serve": "npm run dev",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "vite": "^5.4.2",
+    "vite-plugin-top-level-await": "^1.4.4",
+    "vite-plugin-wasm": "^3.3.0",
+    "vite-plugin-wasm-pack": "^0.1.12"
+  }
+}
