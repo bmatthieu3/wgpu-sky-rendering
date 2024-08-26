@@ -6,7 +6,7 @@ layout(location=0) out vec4 f_color;
 
 layout(set = 0, binding = 0) uniform texture2D t_world_pos;
 layout(set = 0, binding = 1) uniform sampler s_world_pos;
-layout(set = 0, binding = 2) uniform texture2D t_map;
+layout(set = 0, binding = 2) uniform texture3D t_map;
 layout(set = 0, binding = 3) uniform sampler s_map;
 layout(set = 0, binding = 4)
 uniform RotationMatrix {
@@ -185,10 +185,9 @@ vec4 get_color(vec3 pos) {
     int idx = result.idx;
     vec2 uv = vec2(result.dx, result.dy);
 
-    vec2 tq = vec2((float(idx) + uv.y)/12.0, uv.x);
+    vec3 tq = vec3(uv.y, uv.x, float(idx) / 11.0);
 
-    return texture(sampler2D(t_map, s_map), tq);
-    //return vec4(1.0, uv.x, uv.y, 1.0);
+    return texture(sampler3D(t_map, s_map), tq);
 }
 
 void main() {

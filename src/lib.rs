@@ -40,6 +40,7 @@ impl Vertex {
     }
 }
 
+use texture::Texture;
 const NUM_PROJECTIONS: i32 = 6;
 
 struct State<'a> {
@@ -78,12 +79,10 @@ mod math;
 mod projection;
 mod triangulation;
 use crate::projection::*;
-use crate::texture::Texture;
 use crate::triangulation::Triangulation;
-use cgmath::InnerSpace;
 use math::Vec2;
 use crate::math::Vec3;
-fn generate_position<P: Projection<f32>>(size: usize) -> Vec<u8> {
+fn generate_position<P: Projection<f32>>(size: u32) -> Vec<u8> {
     let (w, h) = (size as f32, size as f32);
     let mut data = vec![];
 
@@ -114,13 +113,14 @@ fn generate_position<P: Projection<f32>>(size: usize) -> Vec<u8> {
 pub fn create_position_texture<P: Projection<f32>>(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    size: usize,
+    size: u32,
 ) -> Texture {
-    let texels: Vec<u8> = generate_position::<P>(size);
+    let texels = generate_position::<P>(size);
+    let bytes = texels.as_slice();
 
-    let dimensions = (size, size);
+    let dimensions = (size, size, 1);
     let num_bytes_per_pixel = 4;
-    Texture::from_raw_bytes::<u8>(&device, &queue, &texels, dimensions, num_bytes_per_pixel, "position")
+    Texture::from_raw_bytes::<u8>(&device, &queue, Some(bytes), dimensions, num_bytes_per_pixel, "position")
 }
 
 use crate::math::Mat4;
@@ -137,7 +137,9 @@ impl<'a> State<'a> {
             backends: wgpu::Backends::GL,
             ..Default::default()
         });
+
         let surface = instance.create_surface(window).unwrap();
+
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -146,6 +148,7 @@ impl<'a> State<'a> {
             })
             .await
             .unwrap();
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -184,7 +187,6 @@ impl<'a> State<'a> {
             view_formats: vec![surface_format.add_srgb_suffix()],
             desired_maximum_frame_latency: 2,
         };
-        dbg!("position");
 
         // Texture loading
         let projection_textures = [
@@ -195,9 +197,41 @@ impl<'a> State<'a> {
             create_position_texture::<AzimuthalEquidistant>(&device, &queue, 512),
             create_position_texture::<Gnomonic>(&device, &queue, 512),
         ];
-        let bytes = include_bytes!("../img/map.png");
+        /*let bytes = include_bytes!("../img/map.png");
         let img = image::load_from_memory(bytes).unwrap();
-        let map_texture = texture::Texture::from_image(&device, &queue, &img, "map.png");
+        let map_texture = texture::Texture::from_image(&device, &queue, &img, "map.png");*/
+
+        let map_texture = Texture::from_raw_bytes::<u8>(&device, &queue,
+            None,
+            (512, 512, 12),
+            4,
+            "base HEALPix cells"
+        );
+
+        let tiles = [
+            include_bytes!("../img/Npix0.jpg").to_vec(),
+            include_bytes!("../img/Npix1.jpg").to_vec(),
+            include_bytes!("../img/Npix2.jpg").to_vec(),
+            include_bytes!("../img/Npix3.jpg").to_vec(),
+            include_bytes!("../img/Npix4.jpg").to_vec(),
+            include_bytes!("../img/Npix5.jpg").to_vec(),
+            include_bytes!("../img/Npix6.jpg").to_vec(),
+            include_bytes!("../img/Npix7.jpg").to_vec(),
+            include_bytes!("../img/Npix8.jpg").to_vec(),
+            include_bytes!("../img/Npix9.jpg").to_vec(),
+            include_bytes!("../img/Npix10.jpg").to_vec(),
+            include_bytes!("../img/Npix11.jpg").to_vec()
+        ];
+
+        for (idx, tile_bytes) in tiles.iter().enumerate() {
+            let rgba_tile = image::load_from_memory(&tile_bytes).unwrap().to_rgba8();
+            map_texture.write_data(
+                &queue,
+                (0, 0, idx as u32),
+                &rgba_tile,
+                (512, 512, 1)
+            );
+        }
 
         // Uniform buffer
         let rot_mat_buf = device.create_buffer(&wgpu::BufferDescriptor {
@@ -238,7 +272,7 @@ impl<'a> State<'a> {
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
+                            view_dimension: wgpu::TextureViewDimension::D3,
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         },
                         count: None,
@@ -624,15 +658,35 @@ pub async fn run() {
     #[cfg(target_arch = "wasm32")]
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     #[cfg(target_arch = "wasm32")]
-    console_log::init_with_level(log::Level::Warn).expect("Couldn't initialize logger");
+    console_log::init_with_level(log::Level::Info).expect("Couldn't initialize logger");
     #[cfg(not(target_arch = "wasm32"))]
     env_logger::init();
-    
 
     let event_loop = EventLoop::new().unwrap();
     let window = WindowBuilder::new()
         .with_title("allsky projections")
         .build(&event_loop).unwrap();
+
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        // Winit prevents sizing with CSS, so we have to set
+        // the size manually when on web.
+        use winit::dpi::PhysicalSize;
+        let _ = window.request_inner_size(PhysicalSize::new(450, 400));
+
+        use winit::platform::web::WindowExtWebSys;
+        web_sys::window()
+            .and_then(|win| win.document())
+            .and_then(|doc| {
+                let dst = doc.get_element_by_id("wasm-example")?;
+
+                let canvas = web_sys::Element::from(window.canvas()?);
+                dst.append_child(&canvas).ok()?;
+                Some(())
+            })
+            .expect("Couldn't append canvas to document body.");
+    }
 
     let mut state = State::new(&window).await;
 
@@ -742,24 +796,5 @@ pub async fn run() {
             _ => {}
         }
     }).unwrap();
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        // Winit prevents sizing with CSS, so we have to set
-        // the size manually when on web.
-        use winit::dpi::PhysicalSize;
-        let _ = window.request_inner_size(PhysicalSize::new(450, 400));
-        
-        use winit::platform::web::WindowExtWebSys;
-        web_sys::window()
-            .and_then(|win| win.document())
-            .and_then(|doc| {
-                let dst = doc.get_element_by_id("wasm-example")?;
-                let canvas = web_sys::Element::from(window.canvas()?);
-                dst.append_child(&canvas).ok()?;
-                Some(())
-            })
-            .expect("Couldn't append canvas to document body.");
-    }
 }
 

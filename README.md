@@ -25,9 +25,25 @@ If you want more precision about the algorithm and techniques used:
 
 Play with the left and right keys to change the current projection.
 
-### From Source
+### Test as a native application
 
 ```sh
 # Run
 $ cargo run --release
+```
+
+### Test on the browser (WIP)
+
+1. Install [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/)
+
+2. Install dev dependencies (e.g. vite)
+
+```sh
+npm install
+```
+
+3. Compile to wasm and run a server
+
+```sh
+npm run serve
 ```

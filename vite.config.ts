@@ -13,15 +13,15 @@ export default defineConfig({
         minify: 'esbuild',
         lib: {
             // Could also be a dictionary or array of multiple entry points
-            entry: resolve(__dirname, 'pkg/allsky_proj.js'),
-            name: 'A',
+            entry: resolve(__dirname, 'pkg/wgpu_sky_rendering.js'),
+            name: 'wgpu_sky_rendering',
             formats: ["umd", "es"],
             // the proper extensions will be added
-            fileName: 'allsky_proj',
+            fileName: 'wgpu_sky_rendering',
         },
-        rollupOptions: {},
-        //formats: ["es"],
-        target: ["es2015", "chrome58", "edge18", "firefox57", "node12", "safari11"],
+        //rollupOptions: {},
+        format: "es",
+        //target: ["es2015", "chrome58", "edge18", "firefox57", "node12", "safari11"],
         //target: ["es2015"],
         // Relative to the root
         outDir: resolve(__dirname, 'dist'),
@@ -46,7 +46,7 @@ export default defineConfig({
             'tests/unit/**/*.{test,spec}.{js,ts}'
         ],
         deps: {
-            inline: ['core/pkg'],
+            inline: ['pkg'],
         },
     },
     server: {
