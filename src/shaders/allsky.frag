@@ -3,9 +3,8 @@
 
 layout(location=0) in vec2 pos_cs;
 layout(location=0) out vec4 f_color;
+layout(location=1) in vec3 pos_xyz;
 
-layout(set = 0, binding = 0) uniform texture2D t_world_pos;
-layout(set = 0, binding = 1) uniform sampler s_world_pos;
 layout(set = 0, binding = 2) uniform texture3D t_map;
 layout(set = 0, binding = 3) uniform sampler s_map;
 layout(set = 0, binding = 4)
@@ -192,7 +191,8 @@ vec4 get_color(vec3 pos) {
 
 void main() {
     // Retrieve the position from the texture
-    vec3 pos_ws = normalize((texture(sampler2D(t_world_pos, s_world_pos), pos_cs).xyz - 0.5) * 2.0);
+    //vec3 pos_ws = normalize((texture(sampler2D(t_world_pos, s_world_pos), pos_cs).xyz - 0.5) * 2.0);
+    vec3 pos_ws = normalize(pos_xyz);
     // Rotate it
     vec3 rotated_p = vec3(rot * vec4(pos_ws, 1.0));
 

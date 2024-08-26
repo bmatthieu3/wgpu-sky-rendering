@@ -534,8 +534,12 @@ impl Triangulation {
 
         let vertices: Vec<Vertex> = vertices
             .into_iter()
-            .map(|v| Vertex {
-                position: [v.x, v.y],
+            .map(|v| {
+                let xyz = P::clip_to_world_space(&v).unwrap();
+                Vertex {
+                    ndc: [v.x, v.y],
+                    xyz: [xyz.x, xyz.y, xyz.z],
+                }
             })
             .collect();
 
