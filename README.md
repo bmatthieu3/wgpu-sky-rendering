@@ -1,5 +1,7 @@
 # wgpu-sky-rendering
 
+## What is it ?
+
 A tiny example to show how to render allsky projections using wgpu-rs.
 Allsky projections are used in many ways to represented the earth or the sky on a 2d plane.
 This method does the projection per-pixel and runs in realtime.
@@ -22,10 +24,6 @@ See this [link](https://en.wikipedia.org/wiki/List_of_map_projections) for infor
 If you want more precision about the algorithm and techniques used:
 * Read this [article](https://bmatthieu3.github.io/posts/allskyrendering/) I wrote on my personal blog.
 * See my talk at ADASS 2020 at this [link](https://www.youtube.com/watch?v=TILtJOiiRoc).
-
-## Usage
-
-Play with the left and right keys to change the current projection.
 
 ### Test as a native application
 
