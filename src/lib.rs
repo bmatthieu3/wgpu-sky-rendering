@@ -6,7 +6,7 @@ use wasm_bindgen::prelude::*;
 extern crate console_error_panic_hook;
 
 use std::iter;
-use std::time::Instant;
+
 use wgpu::util::DeviceExt;
 use winit::{
     event::*,
@@ -15,11 +15,15 @@ use winit::{
 };
 use winit::keyboard::PhysicalKey;
 use winit::keyboard::KeyCode;
-
+use winit::window::Fullscreen;
 mod texture;
 mod vertex;
+mod time;
+
+use time::Clock;
 use vertex::Vertex;
 use texture::Texture;
+use crate::math::Vec4;
 const NUM_PROJECTIONS: i32 = 6;
 
 struct State<'a> {
@@ -39,9 +43,6 @@ struct State<'a> {
     index_buffer: wgpu::Buffer,
     num_indices: u32,
 
-    // NEW!
-    #[allow(dead_code)]
-    projection_textures: [texture::Texture; NUM_PROJECTIONS as usize],
     map_texture: texture::Texture,
     texture_bind_group_layout: wgpu::BindGroupLayout,
     diffuse_bind_group: wgpu::BindGroup,
@@ -50,7 +51,7 @@ struct State<'a> {
     rot_mat_buf: wgpu::Buffer,
     window_size_buf: wgpu::Buffer,
 
-    clock: std::time::Instant,
+    clock: Clock,
 }
 
 mod angle;
@@ -137,7 +138,10 @@ impl<'a> State<'a> {
                     // WebGL doesn't support all of wgpu's features, so if
                     // we're building for the web, we'll have to disable some.
                     required_limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
+                        wgpu::Limits {
+                            max_texture_dimension_3d: 512,
+                            ..wgpu::Limits::downlevel_webgl2_defaults()
+                        }
                     } else {
                         wgpu::Limits::default()
                     },
@@ -167,20 +171,13 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-        // Texture loading
-        let projection_textures = [
-            create_position_texture::<Aitoff>(&device, &queue, 512),
-            create_position_texture::<Ortho>(&device, &queue, 512),
-            create_position_texture::<Mollweide>(&device, &queue, 512),
-            create_position_texture::<Mercator>(&device, &queue, 512),
-            create_position_texture::<AzimuthalEquidistant>(&device, &queue, 512),
-            create_position_texture::<Gnomonic>(&device, &queue, 512),
-        ];
         /*let bytes = include_bytes!("../img/map.png");
         let img = image::load_from_memory(bytes).unwrap();
         let map_texture = texture::Texture::from_image(&device, &queue, &img, "map.png");*/
 
-        let map_texture = Texture::from_raw_bytes::<u8>(&device, &queue,
+        let map_texture = Texture::from_raw_bytes::<u8>(
+            &device,
+            &queue,
             None,
             (512, 512, 12),
             4,
@@ -222,7 +219,7 @@ impl<'a> State<'a> {
 
         let window_size_buf = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("window size uniform"),
-            size: 8,
+            size: 16,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -235,7 +232,7 @@ impl<'a> State<'a> {
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
+                            view_dimension: wgpu::TextureViewDimension::D3,
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
                         },
                         count: None,
@@ -246,25 +243,9 @@ impl<'a> State<'a> {
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D3,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
                     // rot matrix uniform
                     wgpu::BindGroupLayoutEntry {
-                        binding: 4,
+                        binding: 2,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
@@ -277,13 +258,13 @@ impl<'a> State<'a> {
                     },
                     // window size uniform
                     wgpu::BindGroupLayoutEntry {
-                        binding: 5,
+                        binding: 3,
                         visibility: wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Uniform,
                             has_dynamic_offset: false,
                             min_binding_size: wgpu::BufferSize::new(
-                                std::mem::size_of::<Vec2<f32>>() as wgpu::BufferAddress,
+                                std::mem::size_of::<Vec4<f32>>() as wgpu::BufferAddress,
                             ),
                         },
                         count: None,
@@ -297,22 +278,14 @@ impl<'a> State<'a> {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&projection_textures[0].view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&projection_textures[0].sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
                     resource: wgpu::BindingResource::TextureView(&map_texture.view),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 3,
+                    binding: 1,
                     resource: wgpu::BindingResource::Sampler(&map_texture.sampler),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 4,
+                    binding: 2,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &rot_mat_buf,
                         offset: 0,
@@ -322,12 +295,12 @@ impl<'a> State<'a> {
                     }),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 5,
+                    binding: 3,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &window_size_buf,
                         offset: 0,
                         size: wgpu::BufferSize::new(
-                            std::mem::size_of::<Vec2<f32>>() as wgpu::BufferAddress
+                            16
                         ),
                     }),
                 },
@@ -417,8 +390,7 @@ impl<'a> State<'a> {
         });
         let num_indices = indices.len() as u32;
 
-        let clock = Instant::now();
-
+        let clock = Clock::now();
         let mut app = Self {
             surface,
             device,
@@ -431,7 +403,6 @@ impl<'a> State<'a> {
             index_buffer,
             num_indices,
 
-            projection_textures,
             map_texture,
 
             texture_bind_group_layout,
@@ -447,8 +418,13 @@ impl<'a> State<'a> {
         app
     }
 
-    fn resize<P: Projection<f32>>(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+    fn resize<P: Projection<f32>>(&mut self, mut new_size: winit::dpi::PhysicalSize<u32>) {
         if new_size.width > 0 && new_size.height > 0 {
+            #[cfg(target_arch="wasm32")] {
+                new_size.width = new_size.width.min(wgpu::Limits::downlevel_webgl2_defaults().max_texture_dimension_2d);
+                new_size.height = new_size.height.min(wgpu::Limits::downlevel_webgl2_defaults().max_texture_dimension_2d);    
+            }
+
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
@@ -459,7 +435,7 @@ impl<'a> State<'a> {
         self.queue.write_buffer(
             &self.window_size_buf,
             0,
-            bytemuck::bytes_of(&[ndc.x, ndc.y]),
+            bytemuck::bytes_of(&[ndc.x, ndc.y, 0.0, 0.0]),
         );
     }
 
@@ -469,7 +445,8 @@ impl<'a> State<'a> {
     }
 
     fn update(&mut self) {
-        let elapsed = self.clock.elapsed().as_secs_f32();
+        let elapsed = self.clock.elapsed_as_secs();
+
         let rot = Mat4::from_angle_y(cgmath::Rad(elapsed));
         let rot: &[[f32; 4]; 4] = rot.as_ref();
 
@@ -532,7 +509,7 @@ impl<'a> State<'a> {
         self.queue.write_buffer(
             &self.window_size_buf,
             0,
-            bytemuck::bytes_of(&[aspect.x, aspect.y]),
+            bytemuck::bytes_of(&[aspect.x, aspect.y, 0.0, 0.0]),
         );
 
         // Update the bind group with the texture position from the current projection
@@ -541,26 +518,14 @@ impl<'a> State<'a> {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(
-                        &self.projection_textures[idx].view,
-                    ),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(
-                        &self.projection_textures[idx].sampler,
-                    ),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
                     resource: wgpu::BindingResource::TextureView(&self.map_texture.view),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 3,
+                    binding: 1,
                     resource: wgpu::BindingResource::Sampler(&self.map_texture.sampler),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 4,
+                    binding: 2,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &self.rot_mat_buf,
                         offset: 0,
@@ -570,12 +535,12 @@ impl<'a> State<'a> {
                     }),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 5,
+                    binding: 3,
                     resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &self.window_size_buf,
                         offset: 0,
                         size: wgpu::BufferSize::new(
-                            std::mem::size_of::<Vec2<f32>>() as wgpu::BufferAddress
+                            16
                         ),
                     }),
                 },
@@ -585,48 +550,54 @@ impl<'a> State<'a> {
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let frame = self.surface.get_current_texture()?;
-        let view = frame.texture.create_view(&wgpu::TextureViewDescriptor {
-            format: Some(self.config.format.add_srgb_suffix()),
-            ..Default::default()
-        });
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.01,
-                            g: 0.01,
-                            b: 0.01,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
-
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+        let size = self.window.inner_size();
+        if size.width == 0 || size.height == 0 {
+            return Ok(())
         }
 
-        self.queue.submit(iter::once(encoder.finish()));
-        frame.present();
+        if let Ok(frame) = self.surface.get_current_texture() {
+            let view = frame.texture.create_view(&wgpu::TextureViewDescriptor {
+                format: Some(self.config.format.add_srgb_suffix()),
+                ..Default::default()
+            });
+    
+            let mut encoder = self
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
+    
+            {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.01,
+                                g: 0.01,
+                                b: 0.01,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                });
+    
+                render_pass.set_pipeline(&self.render_pipeline);
+                render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            }
+    
+            self.queue.submit(iter::once(encoder.finish()));
+            frame.present();
+        }
 
         Ok(())
     }
@@ -637,34 +608,37 @@ pub async fn run() {
     #[cfg(target_arch = "wasm32")]
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     #[cfg(target_arch = "wasm32")]
-    console_log::init_with_level(log::Level::Info).expect("Couldn't initialize logger");
+    console_log::init_with_level(log::Level::Warn).expect("Couldn't initialize logger");
     #[cfg(not(target_arch = "wasm32"))]
     env_logger::init();
 
     let event_loop = EventLoop::new().unwrap();
-    let window = WindowBuilder::new()
-        .with_title("allsky projections")
-        .build(&event_loop).unwrap();
-
+    let mut builder = WindowBuilder::new();
 
     #[cfg(target_arch = "wasm32")]
+    {   
+        use wasm_bindgen::JsCast;
+        use winit::platform::web::WindowBuilderExtWebSys;
+        let canvas = web_sys::window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .get_element_by_id("canvas")
+            .unwrap()
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .unwrap();
+
+        builder = builder.with_canvas(Some(canvas));
+    }
+    let window = builder.with_title("allsky projections")
+        .build(&event_loop).unwrap();
+
+    // Winit prevents sizing with CSS, so we have to set
+    // the size manually when on web.
+    #[cfg(target_arch = "wasm32")]
     {
-        // Winit prevents sizing with CSS, so we have to set
-        // the size manually when on web.
-        use winit::dpi::PhysicalSize;
-        let _ = window.request_inner_size(PhysicalSize::new(450, 400));
-
-        use winit::platform::web::WindowExtWebSys;
-        web_sys::window()
-            .and_then(|win| win.document())
-            .and_then(|doc| {
-                let dst = doc.get_element_by_id("wasm-example")?;
-
-                let canvas = web_sys::Element::from(window.canvas()?);
-                dst.append_child(&canvas).ok()?;
-                Some(())
-            })
-            .expect("Couldn't append canvas to document body.");
+        use winit::dpi::LogicalSize;
+        let _ = window.request_inner_size(LogicalSize::new(768, 512));
     }
 
     let mut state = State::new(&window).await;
@@ -679,6 +653,7 @@ pub async fn run() {
             } if window_id == state.window.id() => {
                 if !state.input(event) {
                     match event {
+                        #[cfg(not(target_arch="wasm32"))]
                         WindowEvent::CloseRequested
                         | WindowEvent::KeyboardInput {
                             event:
@@ -702,6 +677,18 @@ pub async fn run() {
                             count %= NUM_PROJECTIONS;
 
                             state.set_projection(count as usize);
+                        },
+                        WindowEvent::KeyboardInput {
+                            event:
+                                KeyEvent {
+                                    state: ElementState::Pressed,
+                                    physical_key: PhysicalKey::Code(KeyCode::Enter),
+                                    ..
+                                },
+                            ..
+                        } => {
+                            // toggle fullscreen
+                            state.window.set_fullscreen(Some(Fullscreen::Borderless(None)));
                         },
                         WindowEvent::KeyboardInput {
                             event:
@@ -746,7 +733,7 @@ pub async fn run() {
                                 // The system is out of memory, we should probably quit
                                 Err(wgpu::SurfaceError::OutOfMemory) => control_flow.exit(),
                                 // All other errors (Outdated, Timeout) should be resolved by the next frame
-                                Err(e) => eprintln!("{:?}", e),
+                                Err(e) => { eprintln!("{}", e); },
                             }
                         }
                         /*WindowEvent::ScaleFactorChanged { scale_factor, inner_size_writer } => {

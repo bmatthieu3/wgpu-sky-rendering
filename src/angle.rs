@@ -179,6 +179,10 @@ impl<S> Angle<S>
 where
     S: BaseFloat,
 {
+    pub fn to_radians(&self) -> S {
+        self.0
+    }
+
     pub fn new<T: Into<Rad<S>>>(angle: T) -> Angle<S> {
         let radians: Rad<S> = angle.into();
         Angle(radians.0)

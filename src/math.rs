@@ -1,7 +1,6 @@
 use crate::angle::Angle;
 
 use cgmath::BaseFloat;
-use cgmath::{Vector3, Vector4};
 
 #[allow(dead_code)]
 pub type Vec2<T> = cgmath::Vector2<T>;
@@ -39,23 +38,20 @@ pub fn xyzw_to_radec<S: BaseFloat>(v: &cgmath::Vector4<S>) -> (Angle<S>, Angle<S
 
 #[inline]
 #[allow(dead_code)]
-pub fn radec_to_xyzw<S: BaseFloat>(theta: Angle<S>, delta: Angle<S>) -> Vector4<S> {
-    Vector4::<S>::new(
-        delta.cos() * theta.sin(),
-        delta.sin(),
-        delta.cos() * theta.cos(),
-        S::one(),
-    )
+pub fn radec_to_xyzw<S: BaseFloat>(theta: Angle<S>, delta: Angle<S>) -> Vec4<S> {
+    let (d_s, d_c) = delta.to_radians().sin_cos();
+    let (t_s, t_c) = theta.to_radians().sin_cos();
+
+    Vec4::<S>::new(d_c * t_s, d_s, d_c * t_c, S::one())
 }
 
 #[inline]
 #[allow(dead_code)]
-pub fn radec_to_xyz<S: BaseFloat>(theta: Angle<S>, delta: Angle<S>) -> Vector3<S> {
-    Vector3::<S>::new(
-        delta.cos() * theta.sin(),
-        delta.sin(),
-        delta.cos() * theta.cos(),
-    )
+pub fn radec_to_xyz<S: BaseFloat>(theta: Angle<S>, delta: Angle<S>) -> Vec3<S> {
+    let (d_s, d_c) = delta.to_radians().sin_cos();
+    let (t_s, t_c) = theta.to_radians().sin_cos();
+
+    Vec3::<S>::new(d_c * t_s, d_s, d_c * t_c)
 }
 
 #[inline]

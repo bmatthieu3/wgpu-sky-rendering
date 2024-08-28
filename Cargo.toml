@@ -43,7 +43,8 @@ web-sys = { version = "0.3", features = [
     "Document",
     "Window",
     "Element",
-    "HtmlCanvasElement"
+    "HtmlCanvasElement",
+    "Performance"
 ]}
 js-sys = "0.3.50"
 wasm-bindgen-futures = "0.4.30"

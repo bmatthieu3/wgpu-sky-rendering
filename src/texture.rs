@@ -18,7 +18,6 @@ impl TextureFormat for f32 {
 impl TextureFormat for u8 {
     const WGPU_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 }
-use log::info;
 impl Texture {
     fn from_bytes_rgba(
         device: &wgpu::Device,
@@ -32,7 +31,6 @@ impl Texture {
         let dimension = if dimensions.2 == 1 {
             wgpu::TextureDimension::D2
         } else {
-            info!("{:?}", dimensions);
             wgpu::TextureDimension::D3
         };
         let texture = device.create_texture(&wgpu::TextureDescriptor {

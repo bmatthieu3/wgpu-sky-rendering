@@ -4,10 +4,12 @@
   "description": "A simple sky rendering example featuring wgpu basic setup",
   "main": "pkg/wgpu-sky-rendering.js",
   "scripts": {
+    "wasm-dev": "wasm-pack build --target web",
     "wasm": "wasm-pack build --target web --release",
     "build": "npm run wasm && vite build",
-    "dev": "npm run build && vite",
-    "serve": "npm run build && vite",
+    "dev": "cargo watch -s \"npm run wasm-dev\"",
+    "serve": "vite",
+    "demo": "npm run wasm && vite",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",

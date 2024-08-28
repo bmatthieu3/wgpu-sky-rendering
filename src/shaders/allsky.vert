@@ -7,9 +7,9 @@ layout(location=1) in vec3 a_xyz;
 layout(location=0) out vec2 pos_cs;
 layout(location=1) out vec3 pos_xyz;
 
-layout(set = 0, binding = 5)
+layout(set = 0, binding = 3)
 uniform Window {
-    vec2 size;
+    vec4 size;
 };
 
 void main() {

@@ -100,7 +100,7 @@ where
     pub fn add(
         &self,
         vertices: &mut Vec<Vector2<T>>,
-        idx: &mut Vec<u16>,
+        idx: &mut Vec<u32>,
         dir_farthest_vertex: Direction,
     ) {
         let bl = self.get_vertex(Direction::BottomLeft);
@@ -108,7 +108,7 @@ where
         let tr = self.get_vertex(Direction::TopRight);
         let tl = self.get_vertex(Direction::TopLeft);
 
-        let off_idx = vertices.len() as u16;
+        let off_idx = vertices.len() as u32;
 
         // push the 4 vertices
         vertices.push(bl);
@@ -184,9 +184,9 @@ where
         &self,
         p: &[Vector2<T>; 3],
         vertices: &mut Vec<Vector2<T>>,
-        idx: &mut Vec<u16>,
+        idx: &mut Vec<u32>,
     ) {
-        let off_idx = vertices.len() as u16;
+        let off_idx = vertices.len() as u32;
 
         // push the 4 vertices
         vertices.push(p[0]);
@@ -238,7 +238,7 @@ where
 fn recursive_triangulation<T: Float, P: Projection<T>>(
     face: &Face<T>,
     vertices: &mut Vec<Vector2<T>>,
-    idx: &mut Vec<u16>,
+    idx: &mut Vec<u32>,
     depth: u8,
     first: &mut bool,
 ) {
@@ -519,13 +519,13 @@ fn recursive_triangulation<T: Float, P: Projection<T>>(
 use crate::projection::Projection;
 use crate::Vertex;
 impl Triangulation {
-    pub fn create<P: Projection<f32>>() -> (Vec<Vertex>, Vec<u16>) {
+    pub fn create<P: Projection<f32>>() -> (Vec<Vertex>, Vec<u32>) {
         let (mut vertices, mut idx) = (Vec::new(), Vec::new());
 
         let root = Face::new(Vector2::new(-1.0, -1.0), Vector2::new(1.0, 1.0));
         let children = root.split();
 
-        let depth = 4;
+        let depth = 6;
         let mut first = false;
         recursive_triangulation::<f32, P>(&children[0], &mut vertices, &mut idx, depth, &mut first);
         recursive_triangulation::<f32, P>(&children[1], &mut vertices, &mut idx, depth, &mut first);

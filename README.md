@@ -42,8 +42,8 @@ $ cargo run --release
 npm install
 ```
 
-3. Compile to wasm and run a server
+3. Test the web (WASM) version
 
 ```sh
-npm run serve
+npm run demo
 ```

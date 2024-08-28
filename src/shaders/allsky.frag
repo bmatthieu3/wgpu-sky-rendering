@@ -5,9 +5,9 @@ layout(location=0) in vec2 pos_cs;
 layout(location=0) out vec4 f_color;
 layout(location=1) in vec3 pos_xyz;
 
-layout(set = 0, binding = 2) uniform texture3D t_map;
-layout(set = 0, binding = 3) uniform sampler s_map;
-layout(set = 0, binding = 4)
+layout(set = 0, binding = 0) uniform texture3D t_map;
+layout(set = 0, binding = 1) uniform sampler s_map;
+layout(set = 0, binding = 2)
 uniform RotationMatrix {
     mat4 rot;
 };
@@ -184,7 +184,7 @@ vec4 get_color(vec3 pos) {
     int idx = result.idx;
     vec2 uv = vec2(result.dx, result.dy);
 
-    vec3 tq = vec3(uv.y, uv.x, float(idx) / 11.0);
+    vec3 tq = vec3(uv.y, uv.x, ((float(idx) + 0.5)/12.0));
 
     return texture(sampler3D(t_map, s_map), tq);
 }

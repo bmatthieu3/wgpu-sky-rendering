@@ -8,17 +8,30 @@
     <title>Learn WGPU</title>
     <style>
         canvas {
+            padding-left: 0;
+            padding-right: 0;
+            margin-left: auto;
+            margin-right: auto;
+            display: block;
             background-color: black;
         }
     </style>
 </head>
 
 <body id="wasm-example">
-  <p>Demo running on the browser</p>
+  <p>WebGPU demo of a sky raytracer</p>
+  <p>This displays a unresolued rendering of the <a href="https://fr.wikipedia.org/wiki/Digitized_Sky_Survey">DSS survey</a> images</p>
+  <p>Commands</p>
+  <ul>
+      <li>Left/right arrow to change the sky projection</li>
+      <li>Enter for fullscreen mode</li>
+  </ul>
+  <canvas id="canvas"></canvas>
+
   <script type="module">
     import init from "./pkg/wgpu_sky_rendering.js";
     init().then(() => {
-        console.log("WASM Loaded");
+        console.log("WASM demo loaded");
     });
   </script>
 </body>
