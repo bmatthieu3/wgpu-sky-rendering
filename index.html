@@ -27,10 +27,10 @@
       <li>Enter for fullscreen mode</li>
   </ul>
   <canvas id="canvas"></canvas>
-
+  <script type="text/javascript" src="./dist/wgpu_sky_rendering.umd.js" charset="utf-8"></script>
   <script type="module">
-    import init from "./pkg/wgpu_sky_rendering.js";
-    init().then(() => {
+    //import init from "./dist/wgpu_sky_rendering.umd.js";
+    wgpu_sky_rendering.default().then(() => {
         console.log("WASM demo loaded");
     });
   </script>
