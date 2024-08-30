@@ -1,8 +1,10 @@
-# wgpu-sky-rendering
+# Sky rendering of the DSS survey using WebGPU
+
+## Live demo [here](https://bmatthieu3.github.io/sky_rendering_wgpu/index.html)
 
 ## What is it ?
 
-A tiny example to show how to render allsky projections using wgpu-rs.
+An example showing the rendering of allsky projections using wgpu-rs.
 Allsky projections are used in many ways to represented the earth or the sky on a 2d plane.
 This method does the projection per-pixel and runs in realtime.
 
@@ -16,8 +18,6 @@ Supported projections are:
 * [Gnomonic](https://en.wikipedia.org/wiki/Gnomonic_projection)
 
 See this [link](https://en.wikipedia.org/wiki/List_of_map_projections) for information about map projections.
-
-## Demo [here](https://bmatthieu3.github.io/sky_rendering_wgpu/index.html)
 
 ## How it works
 
