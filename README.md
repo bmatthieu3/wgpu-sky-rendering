@@ -1,4 +1,4 @@
-# Sky rendering of the DSS survey using WebGPU
+# All sky rendering using WebGPU
 
 ## Live demo [here](https://bmatthieu3.github.io/sky_rendering_wgpu/index.html)
 
